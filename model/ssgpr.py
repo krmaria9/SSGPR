@@ -1,7 +1,10 @@
+import casadi as ca
 import numpy as np
 from model.tbf import TBF
 from optimizer.minimize import minimize
 import numpy.linalg as LA
+import pickle
+import os
 
 class SSGPR:
     """
@@ -123,6 +126,34 @@ class SSGPR:
         else:
             return mu, stddev
 
+    def predict_symbolic(self, Xs, sample_posterior=False, num_samples=1):
+        """
+        Make symbolic predictions based on input Xs.
+
+        Parameters are analogous to the predict() function.
+        """
+
+        # Calculate some useful constants
+        phi = self.tbf.design_matrix_symbolic(self.X)
+        phi_star = self.tbf.design_matrix_symbolic(Xs)
+        A = (self.tbf.var_0/self.m) * ca.mtimes(phi.T, phi) + self.var_n * ca.SX.eye(2*self.m)
+        R = ca.chol(A).T
+        
+        # Instead of matrix inversion, we use solve to compute the solution of a system of linear equations
+        alpha = self.tbf.var_0 / self.m * ca.mtimes([ca.solve(R, ca.solve(R.T, phi.T @ self.Y))])
+        mu = ca.mtimes(phi_star, alpha) + self.Y_mean  # predictive mean
+        
+        var_term = ca.mtimes(phi_star, ca.solve(R, ca.SX.eye(A.shape[0])))
+        var = self.var_n * (1 + self.tbf.var_0/self.m * ca.sum1(var_term**2)).T
+        stddev = ca.sqrt(var)  # predictive std dev
+
+        if sample_posterior:
+            # For symbolic computations, generating random numbers like numpy's multivariate_normal is a challenge.
+            # CasADi doesn't support direct sampling from distributions.
+            raise NotImplementedError("Sampling from the posterior in symbolic mode is not directly supported.")
+        else:
+            return mu, stddev
+        
     # function that computes the marginal likelihood
     def negative_marginal_log_likelihood(self, params):
         """
@@ -379,3 +410,30 @@ class SSGPR:
         MNLP = -0.5 * (-((mu - self.Y_test) ** 2.) / stddev ** 2 - np.log(2 * np.pi) - np.log(stddev ** 2)).mean()
 
         return NMSE, MNLP
+
+    def save(self, filename):
+        """
+        Save the current SSGPR instance to a pickle file.
+        
+        Parameters:
+        - filename (str): The path of the file to save to.
+        """
+        with open(filename, 'wb') as file:
+            pickle.dump(self, file)
+        
+    @staticmethod
+    def load(filename):
+        """
+        Load an SSGPR instance from a pickle file.
+        
+        Parameters:
+        - filename (str): The path of the file to load from.
+        
+        Returns:
+        - SSGPR instance
+        """
+        if not os.path.exists(filename):
+            raise FileNotFoundError(f"The specified file '{filename}' does not exist.")
+
+        with open(filename, 'rb') as file:
+            return pickle.load(file)

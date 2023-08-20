@@ -11,13 +11,14 @@ from scipy.io import loadmat
 #     Example for high dimensional data          #
 ##################################################
 
-if not os.path.isfile('../data/example_data/elevators.mat'):
+data_dir = os.environ["SSGPR_PATH"] + "/data/"
+if not os.path.isfile(data_dir + 'example_data/elevators.mat'):
     print('Downloading \'elevators\' UCI dataset...')
     urllib.request.urlretrieve('https://drive.google.com/uc?export=download&id=1jhWL3YUHvXIaftia4qeAyDwVxo6j1alk',
-                               '../data/example_data/elevators.mat')
+                               data_dir + 'example_data/elevators.mat')
 
 # get data and process
-data = np.array(loadmat('../data/example_data/elevators.mat')['data'])
+data = np.array(loadmat(data_dir + 'example_data/elevators.mat')['data']) # (16599, 19)
 num_points = 8752
 dimensions = 14
 X = data[:, :-1]

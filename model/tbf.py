@@ -1,3 +1,4 @@
+import casadi as ca
 import numpy as np
 
 class TBF:
@@ -82,4 +83,24 @@ class TBF:
         phi_x = np.zeros((N, 2 * self.M))
         phi_x[:, :self.M] = np.cos(X @ self.W.T)
         phi_x[:, self.M:] = np.sin(X @ self.W.T)
+        return phi_x
+
+    def design_matrix_symbolic(self, X):
+        """
+        Create Trigonometric Basis Function (TBF) design matrix.
+
+        Parameters
+        ----------
+        X : casadi.SX
+            data with which to create design matrix
+
+        Return
+        ------
+        phi_x : casadi.SX
+            Design matrix
+        """
+        N = X.shape[0]
+        phi_x = ca.SX.zeros(N, 2 * self.M)
+        phi_x[:, :self.M] = ca.cos(ca.mtimes(X, self.W.T))
+        phi_x[:, self.M:] = ca.sin(ca.mtimes(X, self.W.T))
         return phi_x
