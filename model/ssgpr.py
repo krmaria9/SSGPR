@@ -140,7 +140,7 @@ class SSGPR:
         R = ca.chol(A).T
         
         # Instead of matrix inversion, we use solve to compute the solution of a system of linear equations
-        alpha = self.tbf.var_0 / self.m * ca.mtimes([ca.solve(R, ca.solve(R.T, phi.T @ self.Y))])
+        alpha = self.tbf.var_0 / self.m * ca.solve(R, ca.solve(R.T, ca.mtimes(phi.T, self.Y)))
         mu = ca.mtimes(phi_star, alpha) + self.Y_mean  # predictive mean
         
         var_term = ca.mtimes(phi_star, ca.solve(R, ca.SX.eye(A.shape[0])))
