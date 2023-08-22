@@ -67,7 +67,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--train', type=int, default=1)
 
-    parser.add_argument("--nbf", type=int, default="100",
+    parser.add_argument("--nbf", type=int, default="20",
                         help="Number of basis functions to use for the SSGP approximation")
 
     parser.add_argument('--x', type=int, default=7,

@@ -227,7 +227,7 @@ def visualization_experiment(quad_sim_options, dataset_name,
     for i in range(std_estimate.shape[1]):
         plt.subplot(std_estimate.shape[1], 1, i+1)
         plt.plot(t_vec, np.zeros(augmented_diff[:, i].shape), 'k')
-        plt.plot(t_vec, mean_estimate-x_pred, 'g', label='y_pred')
+        plt.plot(t_vec, mean_estimate-x_pred, 'g', label='predicted_err')
         plt.plot(t_vec, augmented_diff[:, i], 'b', label='augmented_err')
         plt.plot(t_vec, augmented_diff[:, i] - 3 * std_estimate[:, i], ':c')
         plt.plot(t_vec, augmented_diff[:, i] + 3 * std_estimate[:, i], ':c', label='3 std')
@@ -248,5 +248,5 @@ def visualization_experiment(quad_sim_options, dataset_name,
     plt.tight_layout()
     plt.grid(True)
     filename = 'ssgpr_model_' + str(y_vis_feats) + '_prediction.png'
-    plt.savefig(os.path.join(save_file_path,filename))
+    plt.savefig(os.path.join(save_file_path,filename), dpi=600)
     plt.close()

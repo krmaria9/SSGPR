@@ -13,7 +13,7 @@ export PYTHONPATH="${PYTHONPATH}:${grandparent_dir}"
 export SSGPR_PATH=${grandparent_dir}
 
 # The first argument is the number of points, default value is 100
-n_basis_functions=${1:-100}
+n_basis_functions=${1:-20}
 
 # The rest of the arguments are the dimension indices, default values are "7 8 9"
 dimension_indices=${@:2}
