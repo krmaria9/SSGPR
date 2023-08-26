@@ -5,13 +5,14 @@ from model.ssgpr import SSGPR
 from utils.plots import plot_predictive_2D
 from math import floor
 np.random.seed(0)  # set seed
+import os
 
 ##################################################
 #           Example for 2D data                  #
 ##################################################
 
 # load the data
-data = np.load("../data/example_data/data_2D.npy")
+data = np.load(os.environ["SSGPR_PATH"] + "/data/example_data/data_2D.npy")
 n = floor(0.8*data.shape[0])
 X_train = data[:n,0:2]
 X_test = data[n:,0:2]

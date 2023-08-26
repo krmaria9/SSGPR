@@ -5,6 +5,7 @@ from matplotlib.ticker import LinearLocator, FormatStrFormatter
 import numpy as np
 from src.model_fitting.gp_common import GPDataset, read_dataset
 import os
+import casadi as ca
 
 def plot_convergence(path, convergence):
     N = convergence.shape[0]
@@ -67,27 +68,6 @@ def plot_predictive_1D(path=None, X_train=None, Y_train=None, Xs=None, mu=None, 
     plt.savefig(path, dpi=300)
     plt.close()
     # plt.show()
-
-def plot_predictive_maria(path=None, X_train=None, Y_train=None, Xs=None, mu=None, stddev=None, post_sample=None):
-    plt.figure()
-    if (X_train is not None) and (Y_train is not None):
-        plt.plot(X_train, Y_train, '*', label="Training data", color='blue')  # training data
-    if post_sample is not None:
-        plt.plot(Xs, post_sample, '--', label="Posterior sample")
-    plt.plot(Xs, mu, 'k', lw=2, label="Predictive mean")
-    plt.fill_between(Xs.flat, (mu - 2 * stddev).flat, (mu + 2 * stddev).flat, color="#dddddd",
-                     label="95% confidence interval")
-    plt.grid()
-    plt.autoscale(enable=True, axis='x', tight=True)
-    plt.xlabel("inputs, X")
-    plt.ylabel("targets, Y")
-    plt.legend(loc='lower right')
-    plt.grid(True)
-    plt.tight_layout()
-    # save img
-    # if path is not None:
-    plt.savefig(path, dpi=300)
-    plt.close()
 
 def plot_predictive_2D(path=None, X_train=None, Y_train=None, Xs1=None, Xs2=None, mu=None, stddev=None):
     """
@@ -194,14 +174,30 @@ def visualization_experiment(quad_sim_options, dataset_name,
         test_gp_ds = dataset_name
 
     x_test = test_gp_ds.get_x(pruned=True, raw=True)
-    u_test = test_gp_ds.get_u(pruned=True, raw=True)
     y_test = test_gp_ds.get_y(pruned=True, raw=False)
     dt_test = test_gp_ds.get_dt(pruned=True)
     x_pred = test_gp_ds.get_x_pred(pruned=True, raw=False)
 
     # #### EVALUATE GP ON TEST SET #### #
-    print("Test set prediction...")
-    mean_estimate, std_estimate, f_post = ssgpr.predict(x_test[:,y_vis_feats,np.newaxis], sample_posterior=True)
+    mean_estimate, std_estimate = ssgpr.predict(x_test[:,x_vis_feats])
+    
+    # Predict using symbolic method
+    f_mu, f_stddev = ssgpr.predict_symbolic(ca.SX.sym('X', x_test[:,x_vis_feats].shape[1]).T, type_function=True)
+    res_mu = [f_mu(row) for row in x_test[:, x_vis_feats]]
+    f_mu_val = np.array([float(val) for val in res_mu]).reshape(-1,1)
+    res_std = [f_stddev(row) for row in x_test[:, x_vis_feats]]
+    f_std_val = np.array([float(val) for val in res_std]).reshape(-1,1)
+    
+    # tol = 1e-6
+    # print('####### MU #######')
+    # diff_indices = np.where(np.abs(f_mu_val - mu) > tol)
+    # for i, j in zip(*diff_indices):
+    #     print(f"Element at ({i}, {j}): f_sym={f_mu_val[i, j]}, num={mu[i, j]}")
+
+    # print('####### STDDEV #######')
+    # diff_indices = np.where(np.abs(f_std_val - stddev) > tol)
+    # for i, j in zip(*diff_indices):
+    #     print(f"Element at ({i}, {j}): f_sym={f_std_val[i, j]}, num={stddev[i, j]}")
 
     mean_estimate *= dt_test[:, np.newaxis]
     std_estimate *= dt_test[:, np.newaxis]

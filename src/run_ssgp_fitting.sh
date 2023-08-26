@@ -28,5 +28,5 @@ echo "Dimension indices: $dimension_indices"
 for i in $dimension_indices
 do
     echo "Running with index $i..."
-    python3 "$script_dir"/ssgp_fitting.py --nbf $n_basis_functions --x $i --y $i
+    python3 "$script_dir"/ssgp_fitting.py --train 1 --nbf $n_basis_functions --x $dimension_indices --y $i
 done

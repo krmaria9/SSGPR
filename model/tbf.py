@@ -64,6 +64,29 @@ class TBF:
         """
         self.W = self.w / self.l.T
 
+    def save_scaled_frequencies(self, path):
+        """
+        Save self.W (scaled frequencies) to a CSV file.
+
+        Parameters
+        ----------
+        directory : str
+            Directory where the CSV file should be saved.
+        """
+        np.savetxt(path, self.W, delimiter=",")
+
+    @staticmethod
+    def load_scaled_frequencies(self, path):
+        """
+        Load scaled frequencies from a CSV file and update self.W and self.M.
+
+        Parameters
+        ----------
+        directory : str
+            Directory from where the CSV file should be loaded.
+        """
+        return np.loadtxt(path, delimiter=",")
+
     # build design matrix phi
     def design_matrix(self, X):
         """
@@ -81,9 +104,9 @@ class TBF:
         """
         N = X.shape[0]
         phi_x = np.zeros((N, 2 * self.M))
-        phi_x[:, :self.M] = np.cos(X @ self.W.T)
-        phi_x[:, self.M:] = np.sin(X @ self.W.T)
-        return phi_x
+        phi_x[:, :self.M] = np.cos(X @ self.W.T) # cos(N,M) -> (N,D) x (D,M) -> D = 1, M = nbf
+        phi_x[:, self.M:] = np.sin(X @ self.W.T) # sin(N,M)
+        return phi_x # (1165,100)
 
     def design_matrix_symbolic(self, X):
         """
@@ -100,7 +123,8 @@ class TBF:
             Design matrix
         """
         N = X.shape[0]
-        phi_x = ca.SX.zeros(N, 2 * self.M)
-        phi_x[:, :self.M] = ca.cos(ca.mtimes(X, self.W.T))
-        phi_x[:, self.M:] = ca.sin(ca.mtimes(X, self.W.T))
+        M = self.W.shape[0]
+        phi_x = ca.SX.zeros(N, 2 * M)
+        phi_x[:, :M] = ca.cos(ca.mtimes(X, self.W.T))
+        phi_x[:, M:] = ca.sin(ca.mtimes(X, self.W.T))
         return phi_x

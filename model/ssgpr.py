@@ -125,8 +125,8 @@ class SSGPR:
             return mu, stddev, f_post
         else:
             return mu, stddev
-
-    def predict_symbolic(self, Xs, sample_posterior=False, num_samples=1):
+        
+    def predict_symbolic(self, Xs, type_function=False, num_samples=1):
         """
         Make symbolic predictions based on input Xs.
 
@@ -137,20 +137,22 @@ class SSGPR:
         phi = self.tbf.design_matrix_symbolic(self.X)
         phi_star = self.tbf.design_matrix_symbolic(Xs)
         A = (self.tbf.var_0/self.m) * ca.mtimes(phi.T, phi) + self.var_n * ca.SX.eye(2*self.m)
-        R = ca.chol(A).T
+        R = ca.chol(A) # equivalent to LA.cholesky(A).T
         
-        # Instead of matrix inversion, we use solve to compute the solution of a system of linear equations
         alpha = self.tbf.var_0 / self.m * ca.solve(R, ca.solve(R.T, ca.mtimes(phi.T, self.Y)))
         mu = ca.mtimes(phi_star, alpha) + self.Y_mean  # predictive mean
-        
-        var_term = ca.mtimes(phi_star, ca.solve(R, ca.SX.eye(A.shape[0])))
-        var = self.var_n * (1 + self.tbf.var_0/self.m * ca.sum1(var_term**2)).T
-        stddev = ca.sqrt(var)  # predictive std dev
 
-        if sample_posterior:
-            # For symbolic computations, generating random numbers like numpy's multivariate_normal is a challenge.
-            # CasADi doesn't support direct sampling from distributions.
-            raise NotImplementedError("Sampling from the posterior in symbolic mode is not directly supported.")
+        # Instead of matrix inversion, we use solve to compute the solution of a system of linear equations
+        invR_phi_star = ca.mtimes(phi_star, ca.solve(R, ca.SX.eye(2*self.m)))
+        var_components = invR_phi_star**2
+        var_summed = ca.sum2(var_components)
+        var = self.var_n * (1 + self.tbf.var_0/self.m * var_summed)
+        stddev = ca.sqrt(var)
+
+        if type_function:
+            f_mu = ca.Function('f5', [Xs], [mu])
+            f_stddev = ca.Function('f6', [Xs], [stddev])
+            return f_mu, f_stddev
         else:
             return mu, stddev
         
@@ -420,7 +422,10 @@ class SSGPR:
         """
         with open(filename, 'wb') as file:
             pickle.dump(self, file)
-        
+
+        # Save also scaled frequencies
+        self.tbf.save_scaled_frequencies(filename.replace(".pkl", ".csv"))
+
     @staticmethod
     def load(filename):
         """
