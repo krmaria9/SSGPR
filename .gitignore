@@ -1,7 +1,8 @@
 
 # jupyter notebook
 .ipynb_checkpoints
-
+data/*
+!data/simplified_sim_dataset
 
 # pycharm
 __pycache__

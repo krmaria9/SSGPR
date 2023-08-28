@@ -20,7 +20,7 @@ Y_train = data[:n,2].reshape(-1,1)
 Y_test = data[n:,2].reshape(-1,1)
 
 # create ssgpr instance
-nbf = 100  # number of basis functions
+nbf = 10  # number of basis functions
 ssgpr = SSGPR(num_basis_functions=nbf)
 ssgpr.add_data(X_train, Y_train, X_test, Y_test)
 ssgpr.optimize(restarts=3, verbose=True)
@@ -39,7 +39,7 @@ NMSE, MNLP = ssgpr.evaluate_performance()
 print("Normalised mean squared error (NMSE): %.5f" % NMSE)
 print("Mean negative log probability (MNLP): %.5f" % MNLP)
 
-path = "../doc/imgs/example_2D.png"
+path = os.environ["SSGPR_PATH"] + "/doc/imgs/example_2D.png"
 #plot results
 plot_predictive_2D(path=path, X_train=X_train, Y_train=Y_train, Xs1=X1, Xs2=X2,
                    mu=mu.reshape(X1.shape), stddev=sigma.reshape(X1.shape))

@@ -6,6 +6,7 @@ import numpy as np
 from src.model_fitting.gp_common import GPDataset, read_dataset
 import os
 import casadi as ca
+import pandas as pd
 
 def plot_convergence(path, convergence):
     N = convergence.shape[0]
@@ -103,7 +104,8 @@ def plot_predictive_2D(path=None, X_train=None, Y_train=None, Xs1=None, Xs2=None
     """
     # instantiate figure
     fig = plt.figure(figsize=(10,6))
-    ax = fig.gca(projection='3d')
+    ax = fig.add_subplot(111, projection='3d')
+    # ax = fig.gca(projection='3d')
     # plot scatter of training data.
     if (X_train is not None) and (Y_train is not None):
         ax.scatter(X_train[:,0], X_train[:,1], Y_train, label="Training data", c='red')
@@ -111,37 +113,68 @@ def plot_predictive_2D(path=None, X_train=None, Y_train=None, Xs1=None, Xs2=None
     if stddev is not None:
         p1 = ax.plot_surface(Xs1, Xs2, mu-2*stddev, label="Lower 95% confidence interval",
                             color='yellow' ,alpha=0.2, linewidth=0, antialiased=False)
-        p1._facecolors2d = p1._facecolors3d # fixes matplotlib bug in surface legend
-        p1._edgecolors2d = p1._edgecolors3d
+        p1._facecolors2d = p1._facecolor3d # fixes matplotlib bug in surface legend
+        p1._edgecolors2d = p1._edgecolor3d
     # plot surface of predicted data
     if (Xs1 is not None) and (Xs2 is not None) and (mu is not None):
         p2 = ax.plot_surface(Xs1, Xs2, mu, label="Predictive mean",
                              cmap=cm.coolwarm, linewidth=0, antialiased=False)
         fig.colorbar(p2, shrink=0.5, aspect=5) # Add a color bar which maps values to colors.
-        p2._facecolors2d = p2._facecolors3d
-        p2._edgecolors2d = p2._edgecolors3d
+        p2._facecolors2d = p2._facecolor3d
+        p2._edgecolors2d = p2._edgecolor3d
     # plot upper 95% confidence interval
     if stddev is not None:
         p3 = ax.plot_surface(Xs1, Xs2, mu+2*stddev, label="Upper 95% confidence interval",
                              color='green', alpha=0.2, linewidth=0, antialiased=False)
-        p3._facecolors2d = p3._facecolors3d
-        p3._edgecolors2d = p3._edgecolors3d
+        p3._facecolors2d = p3._facecolor3d
+        p3._edgecolors2d = p3._edgecolor3d
     # axis labels
     ax.set_xlabel("inputs, X1")
     ax.set_ylabel("inputs, X2")
     ax.set_zlabel("targets, y")
     handles, labels = ax.get_legend_handles_labels()
     ax.legend(handles[::-1], labels[::-1], loc='best')
+    ax.grid(True)
+    plt.tight_layout()
     # save img
-    if path is not None:
-        plt.savefig(path, dpi=300)
-    plt.show()
+    # if path is not None:
+    plt.savefig(path, dpi=300)
+    plt.close()
+    # plt.show()
+
+def visualize_data(path, X_train, Y_train, Xs, mu, stddev):
+    feature_combinations = [(0, 1), (0, 2), (1, 2)]
     
+    # Get the global color limits for consistent color mapping
+    vmin = min(np.min(Y_train), np.min(mu))
+    vmax = max(np.max(Y_train), np.max(mu))
+    
+    fig, axs = plt.subplots(1, 3, figsize=(18, 6))
+    
+    for idx, (i, j) in enumerate(feature_combinations):
+        # Scatter plot for training data
+        sc1 = axs[idx].scatter(X_train[:, i], X_train[:, j], c=Y_train.ravel(), cmap='viridis', vmin=vmin, vmax=vmax, marker='o', alpha=0.7, label='Training Data')
+        
+        # Scatter plot for predictions using mu values
+        sc2 = axs[idx].scatter(Xs[:, i], Xs[:, j], c=mu.ravel(), cmap='viridis', vmin=vmin, vmax=vmax, marker='x', alpha=0.7, label='Predictions')
+
+        axs[idx].set_xlabel(f'Feature {i}')
+        axs[idx].set_ylabel(f'Feature {j}')
+        axs[idx].legend()
+        axs[idx].grid(True)
+
+    cbar_ax = fig.add_axes([0.25, 0.95, 0.5, 0.02]) # defines the position and size of the colorbar
+    fig.colorbar(sc1, cax=cbar_ax, orientation='horizontal')
+    plt.suptitle("\n")
+    plt.tight_layout()
+    plt.savefig(f"{path}_comb.png")
+    plt.close()
+
 # Adapted from gp_visualization (ros_gp_mpc)
-def visualization_experiment(quad_sim_options, dataset_name,
-                                x_cap, hist_bins, hist_thresh,
-                                x_vis_feats, u_vis_feats, y_vis_feats,
-                                save_file_path, ssgpr):
+def visualization_experiment(dataset_file,
+                            x_cap, hist_bins, hist_thresh,
+                            x_vis_feats, u_vis_feats, y_vis_feats,
+                            save_file_path, ssgpr):
 
     # # #### GP ENSEMBLE LOADING #### #
     # if pre_set_gp is None:
@@ -166,12 +199,16 @@ def visualization_experiment(quad_sim_options, dataset_name,
     labels_ = [labels_u[feat] for feat in u_vis_feats]
     labels = labels + labels_
 
-    if isinstance(dataset_name, str):
-        test_ds = read_dataset(dataset_name, True, quad_sim_options)
-        test_gp_ds = GPDataset(test_ds, x_features=x_vis_feats, u_features=u_vis_feats, y_dim=y_vis_feats,
-                                cap=x_cap, n_bins=hist_bins, thresh=hist_thresh, visualize_data=False)
-    else:
-        test_gp_ds = dataset_name
+    test_ds = pd.read_csv(dataset_file)
+    test_gp_ds = GPDataset(test_ds, x_features=x_vis_feats, u_features=u_vis_feats, y_dim=y_vis_feats,
+                           cap=x_cap, n_bins=hist_bins, thresh=hist_thresh, visualize_data=False)
+
+    # if isinstance(dataset_name, str):
+    #     test_ds = read_dataset(dataset_name, True, quad_sim_options)
+    #     test_gp_ds = GPDataset(test_ds, x_features=x_vis_feats, u_features=u_vis_feats, y_dim=y_vis_feats,
+    #                             cap=x_cap, n_bins=hist_bins, thresh=hist_thresh, visualize_data=False)
+    # else:
+    #     test_gp_ds = dataset_name
 
     x_test = test_gp_ds.get_x(pruned=True, raw=True)
     y_test = test_gp_ds.get_y(pruned=True, raw=False)
@@ -210,10 +247,13 @@ def visualization_experiment(quad_sim_options, dataset_name,
 
     # GP regresses model error, correct the predictions of the nominal model
     augmented_diff = nominal_diff - mean_estimate
-    mean_estimate += x_pred
 
-    nominal_rmse = np.mean(np.abs(nominal_diff), 0)
-    augmented_rmse = np.mean(np.abs(augmented_diff), 0)
+    nominal_rmse = np.sqrt(np.mean(nominal_diff**2))
+    augmented_rmse = np.sqrt(np.mean(augmented_diff**2))
+
+    # TODO (krmaria): Torrente was using this
+    # nominal_mae = np.mean(np.abs(nominal_diff), 0)
+    # augmented_mae = np.mean(np.abs(augmented_diff), 0)
 
     labels = [r'$v_x$ error', r'$v_y$ error', r'$v_z$ error']
     t_vec = np.cumsum(dt_test)
@@ -223,18 +263,18 @@ def visualization_experiment(quad_sim_options, dataset_name,
     for i in range(std_estimate.shape[1]):
         plt.subplot(std_estimate.shape[1], 1, i+1)
         plt.plot(t_vec, np.zeros(augmented_diff[:, i].shape), 'k')
-        plt.plot(t_vec, mean_estimate-x_pred, 'g', label='predicted_err')
         plt.plot(t_vec, augmented_diff[:, i], 'b', label='augmented_err')
-        plt.plot(t_vec, augmented_diff[:, i] - 3 * std_estimate[:, i], ':c')
-        plt.plot(t_vec, augmented_diff[:, i] + 3 * std_estimate[:, i], ':c', label='3 std')
+        # plt.plot(t_vec, augmented_diff[:, i] - 3 * std_estimate[:, i], ':c')
+        # plt.plot(t_vec, augmented_diff[:, i] + 3 * std_estimate[:, i], ':c', label='3 std')
         if nominal_diff is not None:
             plt.plot(t_vec, nominal_diff[:, i], 'r', label='nominal_err')
-            plt.title('Mean dt: %.2f s. Nominal RMSE: %.5f [m/s].  Augmented rmse: %.5f [m/s]' % (
-                float(np.mean(dt_test)), nominal_rmse[i], augmented_rmse[i]))
+            plt.title('Mean dt: %.2f s. Nom RMSE: %.5f [m/s].  Aug RMSE: %.5f [m/s]' % (
+                float(np.mean(dt_test)), nominal_rmse, augmented_rmse))
         else:
-            plt.title('Mean dt: %.2f s. Augmented RMSE: %.5f [m/s]' % (
-                float(np.mean(dt_test)), float(augmented_rmse[i])))
+            plt.title('Mean dt: %.2f s. Aug RMSE: %.5f [m/s]' % (
+                float(np.mean(dt_test)), float(augmented_rmse)))
 
+        plt.plot(t_vec, mean_estimate, 'g', label='predicted_err')
         plt.ylabel(labels[i])
         plt.legend()
 
@@ -243,6 +283,5 @@ def visualization_experiment(quad_sim_options, dataset_name,
 
     plt.tight_layout()
     plt.grid(True)
-    filename = 'ssgpr_model_' + str(y_vis_feats) + '_prediction.png'
-    plt.savefig(os.path.join(save_file_path,filename), dpi=600)
+    plt.savefig(f"{save_file_path}_pred.png", dpi=400)
     plt.close()

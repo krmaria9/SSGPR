@@ -1,17 +1,22 @@
 import argparse
 import sys
 import numpy as np
+import pandas as pd
 from model.ssgpr import SSGPR
 import os.path
-from utils.plots import plot_predictive_1D, visualization_experiment
+from utils.plots import plot_predictive_1D, visualization_experiment, visualize_data
 from src.model_fitting.gp_common import GPDataset, read_dataset
 from config.configuration_parameters import ModelFitConfig as Conf
 
 def main(x_features, reg_y_dim, quad_sim_options, dataset_name, x_cap, hist_bins, hist_thresh, nbf, train, n_restarts):
     save_dir = os.environ["SSGPR_PATH"] + "/data/" + dataset_name
     os.makedirs(save_dir,exist_ok=True)
-    
-    df_train = read_dataset(dataset_name, True, quad_sim_options)
+
+    # TODO (krmaria): better way than hardcoding path
+    dataset_path = os.environ['FLIGHTMARE_PATH'] + "/misc/data_sihao/"
+    dataset_file = os.path.join(dataset_path,dataset_name + ".csv")
+
+    df_train = pd.read_csv(dataset_file)
     df_train = df_train.sample(frac=1).reset_index(drop=True)
     gp_dataset = GPDataset(df_train, x_features=x_features, u_features=[], y_dim=reg_y_dim,
                         cap=x_cap, n_bins=hist_bins, thresh=hist_thresh, visualize_data=False)
@@ -48,26 +53,25 @@ def main(x_features, reg_y_dim, quad_sim_options, dataset_name, x_cap, hist_bins
         ssgpr = SSGPR.load(os.path.join(save_dir, filename + '.pkl'))
 
     # predict on the test points
-    mu = ssgpr.predict(X_test, sample_posterior=True)
+    mu, std, _ = ssgpr.predict(X_test, sample_posterior=True)
 
     # evaluate the performance
     NMSE, MNLP = ssgpr.evaluate_performance()
     print("Normalised mean squared error (NMSE): %.5f" % NMSE)
     print("Mean negative log probability (MNLP): %.5f" % MNLP)
 
-    filename = 'ssgpr_model_' + str(reg_y_dim)
-    path = os.path.join(save_dir, filename + '.png')
-    # plot_predictive_1D(path=path, X_train=X_train, Y_train=Y_train, Xs=X_test, mu=mu,
-    #                 stddev=sigma, post_sample=f_post)
+    path = os.path.join(save_dir, filename)
+    visualize_data(path=path, X_train=X_train, Y_train=Y_train, Xs=X_test, mu=mu,
+                    stddev=std)
 
-    visualization_experiment(quad_sim_options,dataset_name,x_cap=x_cap,hist_bins=hist_bins,hist_thresh=hist_thresh,
-                            x_vis_feats=x_features,u_vis_feats=[],y_vis_feats=reg_y_dim,save_file_path=save_dir,ssgpr=ssgpr)
+    visualization_experiment(dataset_file,x_cap=x_cap,hist_bins=hist_bins,hist_thresh=hist_thresh,
+                            x_vis_feats=x_features,u_vis_feats=[],y_vis_feats=reg_y_dim,save_file_path=path,ssgpr=ssgpr)
 
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--train', type=int, default=1)
+    parser.add_argument('--train', type=bool, default=True)
 
     parser.add_argument("--nbf", type=int, default="20",
                         help="Number of basis functions to use for the SSGP approximation")
@@ -79,23 +83,16 @@ if __name__ == '__main__':
     parser.add_argument("--y", type=int, default=7,
                         help="Regression Y variable. Must be an integer between 0 and 12. Velocities xyz correspond to"
                              "indices 7, 8, 9.")
+    
+    parser.add_argument("--ds_name", type=str, required=True)
 
     args = parser.parse_args()
-    
-    # Use vx, vy, vz as input features
-    x_feats = args.x
-    
-    # Regression dimension
-    y_regressed_dim = args.y
-    nbf = args.nbf
-    train = args.train==1
     
     # Stuff from Conf
     hist_bins = Conf.histogram_bins
     hist_thresh = Conf.histogram_threshold
     x_cap = Conf.velocity_cap
     quad_sim_options = Conf.ds_metadata
-    dataset_name = Conf.ds_name
 
-    main(x_features=x_feats,reg_y_dim=y_regressed_dim,quad_sim_options=quad_sim_options,dataset_name=dataset_name,
-         x_cap=x_cap,hist_bins=hist_bins,hist_thresh=hist_thresh,nbf=nbf,train=train,n_restarts=3)
+    main(x_features=args.x,reg_y_dim=args.y,quad_sim_options=quad_sim_options,dataset_name=args.ds_name,
+         x_cap=x_cap,hist_bins=hist_bins,hist_thresh=hist_thresh,nbf=args.nbf,train=args.train,n_restarts=3)
