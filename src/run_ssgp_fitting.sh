@@ -13,7 +13,7 @@ export PYTHONPATH="${PYTHONPATH}:${grandparent_dir}"
 export SSGPR_PATH=${grandparent_dir}
 
 # The first argument is the number of points, default value is 100
-n_basis_functions=${1:-20}
+n_basis_functions=${1:-5}
 
 # The rest of the arguments are the dimension indices, default values are "7 8 9"
 dimension_indices=${@:2}
@@ -30,3 +30,5 @@ do
     echo "Running with index $i..."
     python3 "$script_dir"/ssgp_fitting.py --train 1 --nbf $n_basis_functions --x $dimension_indices --y $i --ds_name "INDI_CPC15_2021-03-18-18-05-23"
 done
+
+# python3 "$script_dir"/ssgp_fitting.py --train 1 --nbf $n_basis_functions --x $dimension_indices --y "7" --ds_name "INDI_CPC15_2021-03-18-18-05-23"

@@ -17,7 +17,7 @@ def main(x_features, reg_y_dim, quad_sim_options, dataset_name, x_cap, hist_bins
     dataset_file = os.path.join(dataset_path,dataset_name + ".csv")
 
     df_train = pd.read_csv(dataset_file)
-    df_train = df_train.sample(frac=1).reset_index(drop=True)
+    df_train = df_train.sample(frac=1).reset_index(drop=True) # shuffle
     gp_dataset = GPDataset(df_train, x_features=x_features, u_features=[], y_dim=reg_y_dim,
                         cap=x_cap, n_bins=hist_bins, thresh=hist_thresh, visualize_data=False)
     gp_dataset.cluster(n_clusters=1, load_clusters=False, save_dir=save_dir, visualize_data=False)
@@ -83,7 +83,7 @@ if __name__ == '__main__':
     parser.add_argument("--y", type=int, default=7,
                         help="Regression Y variable. Must be an integer between 0 and 12. Velocities xyz correspond to"
                              "indices 7, 8, 9.")
-    
+
     parser.add_argument("--ds_name", type=str, required=True)
 
     args = parser.parse_args()

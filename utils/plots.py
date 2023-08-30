@@ -170,6 +170,25 @@ def visualize_data(path, X_train, Y_train, Xs, mu, stddev):
     plt.savefig(f"{path}_comb.png")
     plt.close()
 
+    # Visualize error over features
+    fig_error, axs_error = plt.subplots(1, 3, figsize=(18, 6))
+    
+    for idx, i in enumerate(range(3)):
+        # Scatter plot for training data error
+        axs_error[idx].scatter(X_train[:, i], Y_train, c='blue', marker='o', alpha=0.7, label='Training Data Error')
+        
+        # Scatter plot for test data error
+        axs_error[idx].scatter(Xs[:, i], mu, c='red', marker='x', alpha=0.7, label='Predicted Error')
+
+        axs_error[idx].set_xlabel(f'Feature {i}')
+        axs_error[idx].set_ylabel('Error')
+        axs_error[idx].legend()
+        axs_error[idx].grid(True)
+    
+    plt.tight_layout()
+    plt.savefig(f"{path}_error.png")
+    plt.close()
+
 # Adapted from gp_visualization (ros_gp_mpc)
 def visualization_experiment(dataset_file,
                             x_cap, hist_bins, hist_thresh,
@@ -275,7 +294,7 @@ def visualization_experiment(dataset_file,
                 float(np.mean(dt_test)), float(augmented_rmse)))
 
         plt.plot(t_vec, mean_estimate, 'g', label='predicted_err')
-        plt.ylabel(labels[i])
+        plt.ylabel(f'v_{y_vis_feats}')
         plt.legend()
 
         if i == std_estimate.shape[1] - 1:
