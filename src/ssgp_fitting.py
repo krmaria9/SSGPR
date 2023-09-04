@@ -4,7 +4,8 @@ import numpy as np
 import pandas as pd
 from model.ssgpr import SSGPR
 import os.path
-from utils.plots import plot_predictive_1D, visualization_experiment, visualize_data
+# from utils.plots import plot_predictive_1D, visualization_experiment, visualize_data
+from plot_bckp import visualization_experiment, visualize_data
 from src.model_fitting.gp_common import GPDataset, read_dataset
 from config.configuration_parameters import ModelFitConfig as Conf
 
@@ -13,11 +14,12 @@ def main(x_features, reg_y_dim, quad_sim_options, dataset_name, x_cap, hist_bins
     os.makedirs(save_dir,exist_ok=True)
 
     # TODO (krmaria): better way than hardcoding path
-    dataset_path = os.environ['FLIGHTMARE_PATH'] + "/misc/data_sihao/"
-    dataset_file = os.path.join(dataset_path,dataset_name + ".csv")
+    # dataset_path = os.environ['FLIGHTMARE_PATH'] + "/misc/data_sihao/"
+    dataset_path = os.environ['FLIGHTMARE_PATH'] + "/flightmpcc/saved_training/"
+    dataset_file = os.path.join(dataset_path,dataset_name + "/states_inputs_bckp.csv")
 
     df_train = pd.read_csv(dataset_file)
-    df_train = df_train.sample(frac=1).reset_index(drop=True) # shuffle
+    df_train = df_train.sample(frac=0.5).reset_index(drop=True) # shuffle
     gp_dataset = GPDataset(df_train, x_features=x_features, u_features=[], y_dim=reg_y_dim,
                         cap=x_cap, n_bins=hist_bins, thresh=hist_thresh, visualize_data=False)
     gp_dataset.cluster(n_clusters=1, load_clusters=False, save_dir=save_dir, visualize_data=False)
@@ -43,6 +45,7 @@ def main(x_features, reg_y_dim, quad_sim_options, dataset_name, x_cap, hist_bins
 
     # TODO (krmaria): figure out if we can have one model for all three dimensions
     filename = 'ssgpr_model_' + str(reg_y_dim)
+    modelname = os.path.join(save_dir,filename + '.pkl')
     if (train):
         # create ssgpr instance
         ssgpr = SSGPR(num_basis_functions=nbf)
@@ -53,7 +56,10 @@ def main(x_features, reg_y_dim, quad_sim_options, dataset_name, x_cap, hist_bins
         ssgpr = SSGPR.load(os.path.join(save_dir, filename + '.pkl'))
 
     # predict on the test points
-    mu, std, _ = ssgpr.predict(X_test, sample_posterior=True)
+    mu, std, _, alpha = ssgpr.predict(X_test, sample_posterior=True)
+
+    # Save also alpha
+    # np.savetxt(os.path.join(save_dir, filename + '_alpha.csv'), alpha, delimiter=",")
 
     # evaluate the performance
     NMSE, MNLP = ssgpr.evaluate_performance()
@@ -61,8 +67,8 @@ def main(x_features, reg_y_dim, quad_sim_options, dataset_name, x_cap, hist_bins
     print("Mean negative log probability (MNLP): %.5f" % MNLP)
 
     path = os.path.join(save_dir, filename)
-    visualize_data(path=path, X_train=X_train, Y_train=Y_train, Xs=X_test, mu=mu,
-                    stddev=std)
+    # visualize_data(path=path, X_train=X_train, Y_train=Y_train, Xs=X_test, mu=mu,
+    #                 stddev=std)
 
     visualization_experiment(dataset_file,x_cap=x_cap,hist_bins=hist_bins,hist_thresh=hist_thresh,
                             x_vis_feats=x_features,u_vis_feats=[],y_vis_feats=reg_y_dim,save_file_path=path,ssgpr=ssgpr)

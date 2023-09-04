@@ -13,7 +13,7 @@ export PYTHONPATH="${PYTHONPATH}:${grandparent_dir}"
 export SSGPR_PATH=${grandparent_dir}
 
 # The first argument is the number of points, default value is 100
-n_basis_functions=${1:-5}
+n_basis_functions=${1:-20}
 
 # The rest of the arguments are the dimension indices, default values are "7 8 9"
 dimension_indices=${@:2}
@@ -28,7 +28,13 @@ echo "Dimension indices: $dimension_indices"
 for i in $dimension_indices
 do
     echo "Running with index $i..."
-    python3 "$script_dir"/ssgp_fitting.py --train 1 --nbf $n_basis_functions --x $dimension_indices --y $i --ds_name "INDI_CPC15_2021-03-18-18-05-23"
+    python3 "$script_dir"/ssgp_fitting.py --train 1 --nbf $n_basis_functions --x $dimension_indices --y $i --ds_name "20230903_132333-TEST-BEM"
 done
 
-# python3 "$script_dir"/ssgp_fitting.py --train 1 --nbf $n_basis_functions --x $dimension_indices --y "7" --ds_name "INDI_CPC15_2021-03-18-18-05-23"
+# dimension_indices="3 4 5 6 7 8 9 10 11 12"
+# dim_indices_2="10 11 12"
+# for i in $dim_indices_2
+# do
+#     echo "Running with index $i..."
+#     python3 "$script_dir"/ssgp_fitting.py --train 1 --nbf $n_basis_functions --x $dimension_indices --y $i --ds_name "20230903_132333-TEST-BEM"
+# done

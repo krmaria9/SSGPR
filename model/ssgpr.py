@@ -46,8 +46,8 @@ class SSGPR:
         assert Y_train.ndim == 2, "Y_train must be 2-dimensional of shape (N, 1)"
         self.N, self.D  = X_train.shape
         self.X          = X_train
-        self.Y_mean     = Y_train.mean()
-        self.Y          = Y_train - self.Y_mean # subtract target mean to make zero mean targets (added back later)
+        # self.Y_mean     = Y_train.mean()
+        self.Y          = Y_train # - self.Y_mean # subtract target mean to make zero mean targets (added back later)
         if (X_test is not None) and (Y_test is not None):
             assert X_test.ndim == 2, "X_test must be 2-dimensional of shape (N, D)"
             assert Y_test.ndim == 2, "Y_test must be 2-dimensional of shape (N, 1)"
@@ -107,13 +107,16 @@ class SSGPR:
         """
 
         # calculate some useful constants
-        phi = self.tbf.design_matrix(self.X)
-        phi_star = self.tbf.design_matrix(Xs)
+        # self.X has shape (279,3)
+        # Xs has shape (399,3)
+        phi = self.tbf.design_matrix(self.X) # (279,20)
+        phi_star = self.tbf.design_matrix(Xs) # (399,20) -> (1,20)
         A = (self.tbf.var_0/self.m) * phi.T @ phi + self.var_n * np.eye(2*self.m)
         R = LA.cholesky(A).T
         
-        alpha = self.tbf.var_0 / self.m * LA.solve(R, LA.solve(R.T, phi.T@self.Y))
-        mu = (phi_star @ alpha + self.Y_mean).reshape(-1,1) # predictive mean
+        alpha = self.tbf.var_0 / self.m * LA.solve(R, LA.solve(R.T, phi.T@self.Y)) # (20,1)
+        # mu = (phi_star @ alpha + self.Y_mean).reshape(-1,1) # predictive mean
+        mu = (phi_star @ alpha).reshape(-1,1) # predictive mean
         var =(self.var_n * (1 + self.tbf.var_0/self.m * np.sum((phi_star @ LA.inv(R))**2, axis=1))).reshape(-1,1)
         stddev = np.sqrt(var) # predictive std dev
 
@@ -121,8 +124,9 @@ class SSGPR:
             SN = LA.inv(A) * (self.var_n * self.tbf.var_0 / self.m)
             mN = LA.solve(R, LA.solve(R.T, phi.T @ self.Y)) * (self.tbf.var_0 / self.m)
             W = np.random.multivariate_normal(mN.flatten(), SN, num_samples).T
-            f_post = phi_star @ W + self.Y_mean
-            return mu, stddev, f_post
+            # f_post = phi_star @ W + self.Y_mean
+            f_post = phi_star @ W
+            return mu, stddev, f_post, alpha
         else:
             return mu, stddev
         
@@ -140,7 +144,8 @@ class SSGPR:
         R = ca.chol(A) # equivalent to LA.cholesky(A).T
         
         alpha = self.tbf.var_0 / self.m * ca.solve(R, ca.solve(R.T, ca.mtimes(phi.T, self.Y)))
-        mu = ca.mtimes(phi_star, alpha) + self.Y_mean  # predictive mean
+        # mu = ca.mtimes(phi_star, alpha) + self.Y_mean  # predictive mean
+        mu = ca.mtimes(phi_star, alpha)  # predictive mean
 
         # Instead of matrix inversion, we use solve to compute the solution of a system of linear equations
         invR_phi_star = ca.mtimes(phi_star, ca.solve(R, ca.SX.eye(2*self.m)))
@@ -408,7 +413,7 @@ class SSGPR:
 
         mu, stddev = self.predict(self.X_test) # predict on the test points
 
-        NMSE = ((mu - self.Y_test) ** 2).mean() / ((self.Y_mean - self.Y_test) ** 2).mean()
+        NMSE = ((mu - self.Y_test) ** 2).mean() / ((self.Y.mean() - self.Y_test) ** 2).mean()
         MNLP = -0.5 * (-((mu - self.Y_test) ** 2.) / stddev ** 2 - np.log(2 * np.pi) - np.log(stddev ** 2)).mean()
 
         return NMSE, MNLP
