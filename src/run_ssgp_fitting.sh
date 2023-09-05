@@ -13,7 +13,7 @@ export PYTHONPATH="${PYTHONPATH}:${grandparent_dir}"
 export SSGPR_PATH=${grandparent_dir}
 
 # The first argument is the number of points, default value is 100
-n_basis_functions=${1:-20}
+n_basis_functions=${1:-10}
 
 # The rest of the arguments are the dimension indices, default values are "7 8 9"
 dimension_indices=${@:2}
@@ -22,19 +22,18 @@ then
     dimension_indices="7 8 9"
 fi
 
-echo "Dimension indices: $dimension_indices"
-
-# TODO (kmaria): shouldn't x be [7,8,9] while y is 7,8 or 9?
 for i in $dimension_indices
 do
     echo "Running with index $i..."
-    python3 "$script_dir"/ssgp_fitting.py --train 1 --nbf $n_basis_functions --x $dimension_indices --y $i --ds_name "20230903_132333-TEST-BEM"
+    python3 "$script_dir"/ssgp_fitting.py --train 1 --nbf $n_basis_functions --x $dimension_indices --y $i --ds_name "20230904_132333-TEST-BEM"
 done
 
-# dimension_indices="3 4 5 6 7 8 9 10 11 12"
-# dim_indices_2="10 11 12"
-# for i in $dim_indices_2
-# do
-#     echo "Running with index $i..."
-#     python3 "$script_dir"/ssgp_fitting.py --train 1 --nbf $n_basis_functions --x $dimension_indices --y $i --ds_name "20230903_132333-TEST-BEM"
-# done
+dim_indices_2="10 11 12" # w
+input_feats="0 1 2 3" # th
+state_feats="10 11 12" # w
+
+for i in $dim_indices_2
+do
+    echo "Running with index $i..."
+    python3 "$script_dir"/ssgp_fitting.py --train 1 --nbf $n_basis_functions --x $state_feats --u $input_feats --y $i --ds_name "20230904_132333-TEST-BEM"
+done

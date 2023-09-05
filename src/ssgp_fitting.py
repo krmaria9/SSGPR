@@ -9,7 +9,7 @@ from plot_bckp import visualization_experiment, visualize_data
 from src.model_fitting.gp_common import GPDataset, read_dataset
 from config.configuration_parameters import ModelFitConfig as Conf
 
-def main(x_features, reg_y_dim, quad_sim_options, dataset_name, x_cap, hist_bins, hist_thresh, nbf, train, n_restarts):
+def main(x_features, u_features, reg_y_dim, quad_sim_options, dataset_name, x_cap, hist_bins, hist_thresh, nbf, train, n_restarts):
     save_dir = os.environ["SSGPR_PATH"] + "/data/" + dataset_name
     os.makedirs(save_dir,exist_ok=True)
 
@@ -20,7 +20,7 @@ def main(x_features, reg_y_dim, quad_sim_options, dataset_name, x_cap, hist_bins
 
     df_train = pd.read_csv(dataset_file)
     df_train = df_train.sample(frac=0.5).reset_index(drop=True) # shuffle
-    gp_dataset = GPDataset(df_train, x_features=x_features, u_features=[], y_dim=reg_y_dim,
+    gp_dataset = GPDataset(df_train, x_features=x_features, u_features=u_features, y_dim=reg_y_dim,
                         cap=x_cap, n_bins=hist_bins, thresh=hist_thresh, visualize_data=False)
     gp_dataset.cluster(n_clusters=1, load_clusters=False, save_dir=save_dir, visualize_data=False)
     X = gp_dataset.get_x(cluster=0)
@@ -71,7 +71,7 @@ def main(x_features, reg_y_dim, quad_sim_options, dataset_name, x_cap, hist_bins
     #                 stddev=std)
 
     visualization_experiment(dataset_file,x_cap=x_cap,hist_bins=hist_bins,hist_thresh=hist_thresh,
-                            x_vis_feats=x_features,u_vis_feats=[],y_vis_feats=reg_y_dim,save_file_path=path,ssgpr=ssgpr)
+                            x_vis_feats=x_features,u_vis_feats=u_features,y_vis_feats=reg_y_dim,save_file_path=path,ssgpr=ssgpr)
 
 if __name__ == '__main__':
 
@@ -82,9 +82,11 @@ if __name__ == '__main__':
     parser.add_argument("--nbf", type=int, default="20",
                         help="Number of basis functions to use for the SSGP approximation")
 
-    parser.add_argument('--x', nargs='+', type=int, default=[7],
+    parser.add_argument('--x', nargs='+', type=int, default=[],
                         help='Regression X variables. Must be a list of integers between 0 and 12. Velocities xyz '
                              'correspond to indices 7, 8, 9.')
+    
+    parser.add_argument('--u', nargs='+', type=int, default=[])
 
     parser.add_argument("--y", type=int, default=7,
                         help="Regression Y variable. Must be an integer between 0 and 12. Velocities xyz correspond to"
@@ -100,5 +102,5 @@ if __name__ == '__main__':
     x_cap = Conf.velocity_cap
     quad_sim_options = Conf.ds_metadata
 
-    main(x_features=args.x,reg_y_dim=args.y,quad_sim_options=quad_sim_options,dataset_name=args.ds_name,
+    main(x_features=args.x,u_features=args.u,reg_y_dim=args.y,quad_sim_options=quad_sim_options,dataset_name=args.ds_name,
          x_cap=x_cap,hist_bins=hist_bins,hist_thresh=hist_thresh,nbf=args.nbf,train=args.train,n_restarts=3)

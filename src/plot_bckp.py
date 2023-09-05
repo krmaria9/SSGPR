@@ -215,7 +215,7 @@ def visualization_experiment(dataset_file,
         r'$v_x\:\left[\frac{m}{s}\right]$', r'$v_y\:\left[\frac{m}{s}\right]$', r'$v_z\:\left[\frac{m}{s}\right]$',
         r'$w_x\:\left[\frac{rad}{s}\right]$', r'$w_y\:\left[\frac{rad}{s}\right]$', r'$w_z\:\left[\frac{rad}{s}\right]$'
     ]
-    labels_u = [r'$u_1$', r'$u_2$', r'$u_3$', r'$u_4$']
+    labels_u = [r'$u_1$', r'$u_2$', r'$u_3$', r'$u_4$', r'$u_5$', r'$u_6$', r'$u_7$', r'$u_8$']
     labels = [labels_x[feat] for feat in x_vis_feats]
     labels_ = [labels_u[feat] for feat in u_vis_feats]
     labels = labels + labels_
@@ -231,16 +231,18 @@ def visualization_experiment(dataset_file,
     # else:
     #     test_gp_ds = dataset_name
 
+    # TODO (krmaria): need to fix for u
     x_test = test_gp_ds.get_x(pruned=True, raw=True)
+    u_test = test_gp_ds.get_u(pruned=True, raw=True)
     y_test = test_gp_ds.get_y(pruned=True, raw=False)
     dt_test = test_gp_ds.get_dt(pruned=True)
     x_pred = test_gp_ds.get_x_pred(pruned=True, raw=False)
 
     # #### EVALUATE GP ON TEST SET #### #
-    mean_estimate, std_estimate, _, alpha = ssgpr.predict(x_test[:,x_vis_feats], sample_posterior=True)
+    mean_estimate, std_estimate, _, alpha = ssgpr.predict(np.concatenate((x_test[:,x_vis_feats], u_test[:,u_vis_feats]), axis=1), sample_posterior=True)
     
     # My own estimate: load frequencies, compute phi_star, load mu, predict
-    directory = os.environ['SSGPR_PATH'] + '/data/20230903_132333-TEST-BEM'
+    directory = os.environ['SSGPR_PATH'] + '/data/20230904_132333-TEST-BEM'
     file_path = os.path.join(directory, f'ssgpr_model_{y_vis_feats}.csv')
 
     np.savetxt(os.path.join(directory, f'ssgpr_model_{y_vis_feats}_alpha.csv'), alpha, delimiter=",")
@@ -248,22 +250,24 @@ def visualization_experiment(dataset_file,
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"File '{file_path}' not found!")
 
-    W = np.loadtxt(file_path, delimiter=",")
-    x_raw = undo_jsonify(test_ds['state_in'].to_numpy())
-    x_raw = world_to_body_velocity_mapping(x_raw, x_raw)
-    N = x_raw.shape[0]
-    M = W.shape[0]
-    phi_x = np.zeros((N, 2 * M))
-    phi_x[:, :M] = np.cos(x_raw[:,x_vis_feats] @ W.T) # cos(N,M) -> (N,D) x (D,M) -> D = 1, M = nbf
-    phi_x[:, M:] = np.sin(x_raw[:,x_vis_feats] @ W.T) # sin(N,M)
-    mean_estimate_2 = phi_x @ alpha
+    # W = np.loadtxt(file_path, delimiter=",")
+    # x_raw = undo_jsonify(test_ds['state_in'].to_numpy())
+    # # x_raw = world_to_body_velocity_mapping(x_raw, x_raw)
+    # u_raw = undo_jsonify(test_ds['input_in'].to_numpy())
+    # x_raw = np.concatenate((x_raw[:,x_vis_feats], u_raw), axis=1)
+    # N = x_raw.shape[0]
+    # M = W.shape[0]
+    # phi_x = np.zeros((N, 2 * M))
+    # phi_x[:, :M] = np.cos(x_raw @ W.T) # cos(N,M) -> (N,D) x (D,M) -> D = 1, M = nbf
+    # phi_x[:, M:] = np.sin(x_raw @ W.T) # sin(N,M)
+    # mean_estimate_2 = phi_x @ alpha
     
-    # Predict using symbolic method
-    f_mu, f_stddev = ssgpr.predict_symbolic(ca.SX.sym('X', x_test[:,x_vis_feats].shape[1]).T, type_function=True)
-    res_mu = [f_mu(row) for row in x_test[:, x_vis_feats]]
-    f_mu_val = np.array([float(val) for val in res_mu]).reshape(-1,1)
-    res_std = [f_stddev(row) for row in x_test[:, x_vis_feats]]
-    f_std_val = np.array([float(val) for val in res_std]).reshape(-1,1)
+    # # Predict using symbolic method
+    # f_mu, f_stddev = ssgpr.predict_symbolic(ca.SX.sym('X', x_test[:,x_vis_feats].shape[1]).T, type_function=True)
+    # res_mu = [f_mu(row) for row in x_test[:, x_vis_feats]]
+    # f_mu_val = np.array([float(val) for val in res_mu]).reshape(-1,1)
+    # res_std = [f_stddev(row) for row in x_test[:, x_vis_feats]]
+    # f_std_val = np.array([float(val) for val in res_std]).reshape(-1,1)
     
     # tol = 1e-6
     # print('####### MU #######')
@@ -278,7 +282,7 @@ def visualization_experiment(dataset_file,
 
     mean_estimate *= dt_test[:, np.newaxis]
     std_estimate *= dt_test[:, np.newaxis]
-    mean_estimate_2 *= dt_test[:, np.newaxis]
+    # mean_estimate_2 *= dt_test[:, np.newaxis]
 
     # Undo dt normalization
     y_test *= dt_test[:, np.newaxis]
@@ -316,7 +320,7 @@ def visualization_experiment(dataset_file,
                 float(np.mean(dt_test)), float(augmented_rmse)))
 
         plt.plot(t_vec, mean_estimate, 'g', label='predicted_err')
-        plt.plot(t_vec, mean_estimate_2, '--y', label='predicted_err_2')
+        # plt.plot(t_vec, mean_estimate_2, '--y', label='predicted_err_2')
         plt.ylabel(f'v_{y_vis_feats}')
         plt.legend()
 
