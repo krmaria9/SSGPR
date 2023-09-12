@@ -9,6 +9,9 @@ import casadi as ca
 import pandas as pd
 from src.utils.utils import undo_jsonify
 from src.model_fitting.gp_common import world_to_body_velocity_mapping
+from matplotlib.ticker import AutoMinorLocator
+
+REMOVE_IDX = -10
 
 def plot_convergence(path, convergence):
     N = convergence.shape[0]
@@ -20,7 +23,68 @@ def plot_convergence(path, convergence):
     plt.ylabel("Negative marginal log likelihood")
     plt.xlabel("Number of iterations")
     plt.autoscale(enable=True, axis='x', tight=True)
-    plt.show()
+    plt.tight_layout()
+    plt.grid(True)
+    plt.savefig(path, dpi=300)
+    plt.close()
+
+def compute_rmse(error_matrix):
+    return np.sqrt(np.mean(error_matrix**2, axis=1))
+
+def plot_rmse_vs_feature(rmse, data, labels, path):
+    n_subplots = data.shape[1]
+    fig, axs = plt.subplots(n_subplots, 1, figsize=(10, n_subplots * 5))
+    for i in range(n_subplots):
+        axs[i].scatter(data[:, i], rmse, alpha=0.5)
+        axs[i].set_xlabel(labels[i])
+        axs[i].set_ylabel('RMSE')
+        axs[i].grid(True)
+    plt.tight_layout()
+    plt.savefig(path, dpi=300)
+    plt.close()
+
+def visualize_prediction_all(dataset_files, results, save_file_path):
+    # Extracting values for plotting
+    nominal_rmses = [result[0] for result in results]
+    augmented_rmses = [result[1] for result in results]
+    reductions = [result[2] for result in results]
+    
+    # Plotting
+    x = list(range(len(dataset_files)))
+    plt.figure(figsize=(15, 6))
+
+    # Set a width for each bar
+    bar_width = 0.25
+
+    # Positions of bars
+    r1 = [i - bar_width for i in x]
+    r2 = x
+    r3 = [i + bar_width for i in x]
+
+    # Nominal RMSE Bar
+    nom_mean = np.mean(nominal_rmses)
+    plt.bar(r1, nominal_rmses, width=bar_width, label=f'Nominal RMSE = {nom_mean:.2f}', align='center')
+    plt.axhline(nom_mean, color='blue', linestyle='dashed', linewidth=1)
+
+    # Augmented RMSE Bar
+    aug_mean = np.mean(augmented_rmses)
+    plt.bar(r2, augmented_rmses, width=bar_width, label=f'Augmented RMSE = {aug_mean:.2f}', align='center')
+    plt.axhline(aug_mean, color='orange', linestyle='dashed', linewidth=1)
+
+    # Reduction Bar
+    reduc_mean = np.mean(reductions)
+    plt.bar(r3, reductions, width=bar_width, label=f'Augmented/Nominal = {reduc_mean:.2f}', align='center', color='green')
+    plt.axhline(reduc_mean, color='green', linestyle='dashed', linewidth=1,)
+
+    ax = plt.gca()  # Get the current Axes instance
+    ax.yaxis.set_minor_locator(AutoMinorLocator())
+    plt.xticks(x, [os.path.basename(f).replace("_states_inputs_out.csv", "") for f in dataset_files], rotation=45, ha="right")
+    plt.ylabel('RMSE')
+    plt.legend()
+    plt.tight_layout()
+    plt.grid(True, which='both', linestyle='--', linewidth=0.5) 
+    plt.savefig(f"{save_file_path}_pred_all.png", dpi=400)
+    plt.close()
 
 def plot_predictive_1D(path=None, X_train=None, Y_train=None, Xs=None, mu=None, stddev=None, post_sample=None):
     """
@@ -144,45 +208,27 @@ def plot_predictive_2D(path=None, X_train=None, Y_train=None, Xs1=None, Xs2=None
     plt.close()
     # plt.show()
 
-def visualize_data(path, X_train, Y_train, Xs, mu, stddev):
-    feature_combinations = [(0, 1), (0, 2), (1, 2)]
-    
-    # Get the global color limits for consistent color mapping
-    vmin = min(np.min(Y_train), np.min(mu))
-    vmax = max(np.max(Y_train), np.max(mu))
-    
-    fig, axs = plt.subplots(1, 3, figsize=(18, 6))
-    
-    for idx, (i, j) in enumerate(feature_combinations):
-        # Scatter plot for training data
-        sc1 = axs[idx].scatter(X_train[:, i], X_train[:, j], c=Y_train.ravel(), cmap='viridis', vmin=vmin, vmax=vmax, marker='o', alpha=0.7, label='Training Data')
-        
-        # Scatter plot for predictions using mu values
-        sc2 = axs[idx].scatter(Xs[:, i], Xs[:, j], c=mu.ravel(), cmap='viridis', vmin=vmin, vmax=vmax, marker='x', alpha=0.7, label='Predictions')
-
-        axs[idx].set_xlabel(f'Feature {i}')
-        axs[idx].set_ylabel(f'Feature {j}')
-        axs[idx].legend()
-        axs[idx].grid(True)
-
-    cbar_ax = fig.add_axes([0.25, 0.95, 0.5, 0.02]) # defines the position and size of the colorbar
-    fig.colorbar(sc1, cax=cbar_ax, orientation='horizontal')
-    plt.suptitle("\n")
-    plt.tight_layout()
-    plt.savefig(f"{path}_comb.png")
-    plt.close()
+def visualize_error(path, X_test, Y_test, Xs, mu, stddev, x_vis_feats, u_vis_feats, z_vis_feats):
+    feats = x_vis_feats + u_vis_feats
 
     # Visualize error over features
-    fig_error, axs_error = plt.subplots(1, 3, figsize=(18, 6))
+    if X_test.shape[1]==10:
+        _, axs_error = plt.subplots(2, 5, figsize=(18, 6))
+        axs_error = axs_error.flatten()
+    else:
+        _, axs_error = plt.subplots(1, 3, figsize=(18, 6))
     
-    for idx, i in enumerate(range(3)):
+    for idx, i in enumerate(range(X_test.shape[1])):
         # Scatter plot for training data error
-        axs_error[idx].scatter(X_train[:, i], Y_train, c='blue', marker='o', alpha=0.7, label='Training Data Error')
+        axs_error[idx].scatter(X_test[:, i], Y_test, c='blue', marker='o', alpha=0.7, label='Test Error')
         
         # Scatter plot for test data error
         axs_error[idx].scatter(Xs[:, i], mu, c='red', marker='x', alpha=0.7, label='Predicted Error')
 
-        axs_error[idx].set_xlabel(f'Feature {i}')
+        if i < len(x_vis_feats):
+            axs_error[idx].set_xlabel(f'x_{feats[i]}')
+        else:
+            axs_error[idx].set_xlabel(f'u_{feats[i]}')
         axs_error[idx].set_ylabel('Error')
         axs_error[idx].legend()
         axs_error[idx].grid(True)
@@ -194,7 +240,7 @@ def visualize_data(path, X_train, Y_train, Xs, mu, stddev):
 # Adapted from gp_visualization (ros_gp_mpc)
 def visualization_experiment(dataset_file,
                             x_cap, hist_bins, hist_thresh,
-                            x_vis_feats, u_vis_feats, y_vis_feats,
+                            x_vis_feats, u_vis_feats, z_vis_feats, y_vis_feats,
                             save_file_path, ssgpr):
 
     # # #### GP ENSEMBLE LOADING #### #
@@ -221,6 +267,14 @@ def visualization_experiment(dataset_file,
     labels = labels + labels_
 
     test_ds = pd.read_csv(dataset_file)
+    
+    original_length = len(test_ds) 
+    test_ds = test_ds.drop_duplicates(subset=['state_in', 'input_in'], keep='first')
+    final_length = len(test_ds)
+    print(f"{original_length-final_length} rows were dropped out of {original_length}")
+    
+    test_ds = test_ds[:REMOVE_IDX]
+    
     test_gp_ds = GPDataset(test_ds, x_features=x_vis_feats, u_features=u_vis_feats, y_dim=y_vis_feats,
                            cap=x_cap, n_bins=hist_bins, thresh=hist_thresh, visualize_data=False)
 
@@ -234,51 +288,14 @@ def visualization_experiment(dataset_file,
     # TODO (krmaria): need to fix for u
     x_test = test_gp_ds.get_x(pruned=True, raw=True)
     u_test = test_gp_ds.get_u(pruned=True, raw=True)
+    z_test = test_gp_ds.get_z(pruned=True, raw=True)
     y_test = test_gp_ds.get_y(pruned=True, raw=False)
     dt_test = test_gp_ds.get_dt(pruned=True)
     x_pred = test_gp_ds.get_x_pred(pruned=True, raw=False)
 
     # #### EVALUATE GP ON TEST SET #### #
-    mean_estimate, std_estimate, _, alpha = ssgpr.predict(np.concatenate((x_test[:,x_vis_feats], u_test[:,u_vis_feats]), axis=1), sample_posterior=True)
-    
-    # My own estimate: load frequencies, compute phi_star, load mu, predict
-    directory = os.environ['SSGPR_PATH'] + '/data/20230904_132333-TEST-BEM'
-    file_path = os.path.join(directory, f'ssgpr_model_{y_vis_feats}.csv')
-
-    np.savetxt(os.path.join(directory, f'ssgpr_model_{y_vis_feats}_alpha.csv'), alpha, delimiter=",")
-
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(f"File '{file_path}' not found!")
-
-    # W = np.loadtxt(file_path, delimiter=",")
-    # x_raw = undo_jsonify(test_ds['state_in'].to_numpy())
-    # # x_raw = world_to_body_velocity_mapping(x_raw, x_raw)
-    # u_raw = undo_jsonify(test_ds['input_in'].to_numpy())
-    # x_raw = np.concatenate((x_raw[:,x_vis_feats], u_raw), axis=1)
-    # N = x_raw.shape[0]
-    # M = W.shape[0]
-    # phi_x = np.zeros((N, 2 * M))
-    # phi_x[:, :M] = np.cos(x_raw @ W.T) # cos(N,M) -> (N,D) x (D,M) -> D = 1, M = nbf
-    # phi_x[:, M:] = np.sin(x_raw @ W.T) # sin(N,M)
-    # mean_estimate_2 = phi_x @ alpha
-    
-    # # Predict using symbolic method
-    # f_mu, f_stddev = ssgpr.predict_symbolic(ca.SX.sym('X', x_test[:,x_vis_feats].shape[1]).T, type_function=True)
-    # res_mu = [f_mu(row) for row in x_test[:, x_vis_feats]]
-    # f_mu_val = np.array([float(val) for val in res_mu]).reshape(-1,1)
-    # res_std = [f_stddev(row) for row in x_test[:, x_vis_feats]]
-    # f_std_val = np.array([float(val) for val in res_std]).reshape(-1,1)
-    
-    # tol = 1e-6
-    # print('####### MU #######')
-    # diff_indices = np.where(np.abs(f_mu_val - mu) > tol)
-    # for i, j in zip(*diff_indices):
-    #     print(f"Element at ({i}, {j}): f_sym={f_mu_val[i, j]}, num={mu[i, j]}")
-
-    # print('####### STDDEV #######')
-    # diff_indices = np.where(np.abs(f_std_val - stddev) > tol)
-    # for i, j in zip(*diff_indices):
-    #     print(f"Element at ({i}, {j}): f_sym={f_std_val[i, j]}, num={stddev[i, j]}")
+    mean_estimate, std_estimate, _, alpha = ssgpr.predict(np.concatenate((x_test[:,x_vis_feats], u_test[:,u_vis_feats], z_test[:,z_vis_feats]), axis=1), sample_posterior=True)
+    # mean_estimate, std_estimate, _, alpha = ssgpr.predict(np.concatenate((x_test[:,x_vis_feats], u_test[:,u_vis_feats]), axis=1), sample_posterior=True)
 
     mean_estimate *= dt_test[:, np.newaxis]
     std_estimate *= dt_test[:, np.newaxis]
@@ -301,7 +318,8 @@ def visualization_experiment(dataset_file,
     # augmented_mae = np.mean(np.abs(augmented_diff), 0)
 
     labels = [r'$v_x$ error', r'$v_y$ error', r'$v_z$ error']
-    t_vec = np.cumsum(dt_test)
+    # t_vec = np.cumsum(dt_test)
+    t_vec = test_ds['timestamp']
     plt.figure()
     # mng = plt.get_current_fig_manager()
     # mng.resize(*mng.window.maxsize())
@@ -313,10 +331,10 @@ def visualization_experiment(dataset_file,
         # plt.plot(t_vec, augmented_diff[:, i] + 3 * std_estimate[:, i], ':c', label='3 std')
         if nominal_diff is not None:
             plt.plot(t_vec, nominal_diff[:, i], 'r', label='nominal_err')
-            plt.title('Mean dt: %.2f s. Nom RMSE: %.5f [m/s].  Aug RMSE: %.5f [m/s]' % (
-                float(np.mean(dt_test)), nominal_rmse, augmented_rmse))
+            plt.title('Dt: %.2f s. Nom RMSE: %.3f.  Aug RMSE: %.3f. Reduc: %.2f' % (
+                float(np.mean(dt_test)), nominal_rmse, augmented_rmse, augmented_rmse/nominal_rmse))
         else:
-            plt.title('Mean dt: %.2f s. Aug RMSE: %.5f [m/s]' % (
+            plt.title('Dt: %.2f s. Aug RMSE: %.5f [m/s]' % (
                 float(np.mean(dt_test)), float(augmented_rmse)))
 
         plt.plot(t_vec, mean_estimate, 'g', label='predicted_err')
@@ -331,3 +349,66 @@ def visualization_experiment(dataset_file,
     plt.grid(True)
     plt.savefig(f"{save_file_path}_pred.png", dpi=400)
     plt.close()
+    
+def analyze_experiment(dataset_files,
+                       x_cap, hist_bins, hist_thresh,
+                       x_vis_feats, u_vis_feats, z_vis_feats, y_vis_feats,
+                       save_file_path, ssgpr):
+    labels_x = [
+        r'$p_x\:\left[m\right]$', r'$p_y\:\left[m\right]$', r'$p_z\:\left[m\right]$',
+        r'$q_w\:\left[rad\right]$', r'$q_x\:\left[rad\right]$', r'$q_y\:\left[rad\right]$', r'$q_z\:\left[rad\right]$',
+        r'$v_x\:\left[\frac{m}{s}\right]$', r'$v_y\:\left[\frac{m}{s}\right]$', r'$v_z\:\left[\frac{m}{s}\right]$',
+        r'$w_x\:\left[\frac{rad}{s}\right]$', r'$w_y\:\left[\frac{rad}{s}\right]$', r'$w_z\:\left[\frac{rad}{s}\right]$'
+    ]
+    labels_u = [r'$u_1$', r'$u_2$', r'$u_3$', r'$u_4$', r'$u_5$', r'$u_6$', r'$u_7$', r'$u_8$']
+
+    all_rmse = []
+    all_u_test = []
+    all_x_test = []
+    results = []
+
+    for dataset_file in dataset_files:
+        test_ds = pd.read_csv(dataset_file)
+        
+        test_gp_ds = GPDataset(test_ds, x_features=x_vis_feats, u_features=u_vis_feats, y_dim=y_vis_feats,
+                               cap=x_cap, n_bins=hist_bins, thresh=hist_thresh, visualize_data=False)
+
+        x_test = test_gp_ds.get_x(pruned=True, raw=True)
+        u_test = test_gp_ds.get_u(pruned=True, raw=True)
+        z_test = test_gp_ds.get_z(pruned=True, raw=True)
+        y_test = test_gp_ds.get_y(pruned=True, raw=False)
+        dt_test = test_gp_ds.get_dt(pruned=True)
+
+        mean_estimate, _, _, alpha = ssgpr.predict(np.concatenate((x_test[:,x_vis_feats], u_test[:,u_vis_feats], z_test[:,z_vis_feats]), axis=1), sample_posterior=True)
+
+        mean_estimate *= dt_test[:, np.newaxis]
+        y_test *= dt_test[:, np.newaxis]
+
+        nominal_diff = y_test
+        error_matrix = mean_estimate - nominal_diff
+        rmse_per_sample = compute_rmse(error_matrix)
+        
+        all_rmse.extend(rmse_per_sample)
+        all_u_test.extend(u_test[:,u_vis_feats])
+        all_x_test.extend(x_test[:,x_vis_feats])
+
+        augmented_diff = nominal_diff - mean_estimate
+        nominal_rmse = np.sqrt(np.mean(nominal_diff**2))
+        augmented_rmse = np.sqrt(np.mean(augmented_diff**2))
+        reduction = augmented_rmse/nominal_rmse
+        results.append((nominal_rmse, augmented_rmse, reduction))
+
+    # Convert lists to numpy arrays
+    all_rmse = np.array(all_rmse)
+    all_u_test = np.array(all_u_test)
+    all_x_test = np.array(all_x_test)
+    
+    # # RMSE vs Input feature
+    # if u_vis_feats:
+    #     plot_rmse_vs_feature(all_rmse, all_u_test, [labels_u[feat] for feat in u_vis_feats], path=f"{save_file_path}_rmse_u.png")
+
+    # if x_vis_feats:
+    #     plot_rmse_vs_feature(all_rmse, all_x_test, [labels_x[feat] for feat in x_vis_feats], path=f"{save_file_path}_rmse_x.png")
+
+    # Experiment Plot
+    visualize_prediction_all(dataset_files, results, save_file_path)

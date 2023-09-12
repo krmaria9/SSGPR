@@ -13,27 +13,25 @@ export PYTHONPATH="${PYTHONPATH}:${grandparent_dir}"
 export SSGPR_PATH=${grandparent_dir}
 
 # The first argument is the number of points, default value is 100
-n_basis_functions=${1:-10}
+n_basis_functions=${1:-20}
 
 # The rest of the arguments are the dimension indices, default values are "7 8 9"
-dimension_indices=${@:2}
-if [ -z "$dimension_indices" ]
-then
-    dimension_indices="7 8 9"
-fi
-
-for i in $dimension_indices
+dim_indices="7 8 9" # v
+state_feats="7 8 9"
+for i in $dim_indices
 do
     echo "Running with index $i..."
-    python3 "$script_dir"/ssgp_fitting.py --train 1 --nbf $n_basis_functions --x $dimension_indices --y $i --ds_name "20230904_132333-TEST-BEM"
+    python3 "$script_dir"/ssgp_fitting.py --train 1 --nbf $n_basis_functions --x $state_feats --y $i --ds_name "20230910_185814-TRAIN-BEM"
 done
 
 dim_indices_2="10 11 12" # w
-input_feats="0 1 2 3" # th
-state_feats="10 11 12" # w
+# input_feats="4 5 6 7" # th
+# state_feats="7 8 9 10 11 12" # v, w
+aux_feats="0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15"
 
 for i in $dim_indices_2
 do
     echo "Running with index $i..."
-    python3 "$script_dir"/ssgp_fitting.py --train 1 --nbf $n_basis_functions --x $state_feats --u $input_feats --y $i --ds_name "20230904_132333-TEST-BEM"
+    # python3 "$script_dir"/ssgp_fitting.py --train 1 --nbf $n_basis_functions --x $state_feats --u $input_feats --z $aux_feats --y $i --ds_name "20230910_185814-TRAIN-BEM"
+    python3 "$script_dir"/ssgp_fitting.py --train 1 --nbf $n_basis_functions --z $aux_feats --y $i --ds_name "20230910_185814-TRAIN-BEM"
 done

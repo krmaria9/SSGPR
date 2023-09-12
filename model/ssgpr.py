@@ -5,6 +5,7 @@ from optimizer.minimize import minimize
 import numpy.linalg as LA
 import pickle
 import os
+from plot_bckp import plot_convergence
 
 class SSGPR:
     """
@@ -276,7 +277,7 @@ class SSGPR:
         grad = self.gradients(params)
         return nmll, grad
 
-    def optimize(self, restarts=3, maxiter=1000, verbose=True):
+    def optimize(self, save_dir, restarts=3, maxiter=1000, verbose=True):
         """
         Optimize the marginal log likelihood with conjugate gradients minimization.
 
@@ -340,7 +341,8 @@ class SSGPR:
 
             # minimize
             X0 = np.hstack((lengthscales, amplitude, noise_variance, spectral_points)).reshape(-1,1)
-            Xs, convergence, _ = minimize(self.objective_function, X0, length=maxiter, verbose=verbose, concise=True)
+            Xs, convergence, _, fX = minimize(self.objective_function, X0, length=maxiter, verbose=verbose, concise=True)
+            plot_convergence(save_dir + f"_conv_{restart}.png", fX)
 
             # check if the local optimum beat the current global optimum
             if convergence < global_opt:
@@ -375,7 +377,7 @@ class SSGPR:
         print("amplitude: ", self.tbf.var_0)
         print("noise variance: ", self.var_n)
 
-    def evaluate_performance(self, restarts=3):
+    def evaluate_performance(self, save_dir, restarts=3, maxiter=1000):
         """
         Evaluates the performance of the predictive mean by calculating the
         normalized mean squared error (NMSE) and the mean negative log
@@ -409,7 +411,7 @@ class SSGPR:
             raise Exception("No test data loaded in add_data!")
 
         if not self.optimized:
-            self.optimize(restarts=restarts, verbose=False)
+            self.optimize(save_dir, restarts=restarts, maxiter=maxiter, verbose=False)
 
         mu, stddev = self.predict(self.X_test) # predict on the test points
 

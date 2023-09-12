@@ -183,4 +183,4 @@ def minimize(f, X, length, args=(), reduction=None, verbose=True, concise=False)
 		convergence =  np.hstack((np.array(fX).reshape(-1,1), np.array(Xd)[:,:,0])) # bundle convergence info
 	Xs = X # solution
 
-	return Xs, convergence, i
+	return Xs, convergence, i, np.vstack(fX)
