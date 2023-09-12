@@ -43,6 +43,19 @@ def plot_rmse_vs_feature(rmse, data, labels, path):
     plt.savefig(path, dpi=300)
     plt.close()
 
+def create_steps_ahead_matrix(X, n_steps_ahead, n_pred_samples):
+    """
+    For a given matrix X, this function creates a new matrix by concatenating rows that are N steps ahead,
+    for M times.
+
+    :param X: The input matrix
+    :param N: Steps ahead
+    :param M: Number of times to concatenate
+    :return: New matrix
+    """
+    parts = [X[i:-n_steps_ahead*n_pred_samples+i] for i in range(0, n_steps_ahead*n_pred_samples, n_steps_ahead)]
+    return np.hstack(parts)
+
 def visualize_prediction_all(dataset_files, results, save_file_path):
     # Extracting values for plotting
     nominal_rmses = [result[0] for result in results]
@@ -241,7 +254,7 @@ def visualize_error(path, X_test, Y_test, Xs, mu, stddev, x_vis_feats, u_vis_fea
 def visualization_experiment(dataset_file,
                             x_cap, hist_bins, hist_thresh,
                             x_vis_feats, u_vis_feats, z_vis_feats, y_vis_feats,
-                            save_file_path, ssgpr):
+                            save_file_path, ssgpr,n_steps_ahead,n_pred_samples):
 
     # # #### GP ENSEMBLE LOADING #### #
     # if pre_set_gp is None:
@@ -278,23 +291,25 @@ def visualization_experiment(dataset_file,
     test_gp_ds = GPDataset(test_ds, x_features=x_vis_feats, u_features=u_vis_feats, y_dim=y_vis_feats,
                            cap=x_cap, n_bins=hist_bins, thresh=hist_thresh, visualize_data=False)
 
-    # if isinstance(dataset_name, str):
-    #     test_ds = read_dataset(dataset_name, True, quad_sim_options)
-    #     test_gp_ds = GPDataset(test_ds, x_features=x_vis_feats, u_features=u_vis_feats, y_dim=y_vis_feats,
-    #                             cap=x_cap, n_bins=hist_bins, thresh=hist_thresh, visualize_data=False)
-    # else:
-    #     test_gp_ds = dataset_name
+    test_gp_ds.cluster(n_clusters=1, load_clusters=False, visualize_data=False)
 
     # TODO (krmaria): need to fix for u
-    x_test = test_gp_ds.get_x(pruned=True, raw=True)
-    u_test = test_gp_ds.get_u(pruned=True, raw=True)
-    z_test = test_gp_ds.get_z(pruned=True, raw=True)
-    y_test = test_gp_ds.get_y(pruned=True, raw=False)
+    X_init = test_gp_ds.get_x(cluster=0)
+    Y_init = test_gp_ds.get_y(cluster=0)
     dt_test = test_gp_ds.get_dt(pruned=True)
     x_pred = test_gp_ds.get_x_pred(pruned=True, raw=False)
+    
+    # X = np.concatenate((x_test[:,x_vis_feats], u_test[:,u_vis_feats], z_test[:,z_vis_feats]), axis=1)
+
+    X_new = create_steps_ahead_matrix(X_init,n_steps_ahead,n_pred_samples)
+    y_test = Y_init[n_steps_ahead*n_pred_samples:]
+    
+    t_vec = test_ds['timestamp'][n_steps_ahead*n_pred_samples:]
+    dt_test = dt_test[n_steps_ahead*n_pred_samples:]
 
     # #### EVALUATE GP ON TEST SET #### #
-    mean_estimate, std_estimate, _, alpha = ssgpr.predict(np.concatenate((x_test[:,x_vis_feats], u_test[:,u_vis_feats], z_test[:,z_vis_feats]), axis=1), sample_posterior=True)
+    mean_estimate, std_estimate, _, alpha = ssgpr.predict(X_new, sample_posterior=True)
+    # mean_estimate, std_estimate, _, alpha = ssgpr.predict(np.concatenate((x_test[:,x_vis_feats], u_test[:,u_vis_feats], z_test[:,z_vis_feats]), axis=1), sample_posterior=True)
     # mean_estimate, std_estimate, _, alpha = ssgpr.predict(np.concatenate((x_test[:,x_vis_feats], u_test[:,u_vis_feats]), axis=1), sample_posterior=True)
 
     mean_estimate *= dt_test[:, np.newaxis]
@@ -319,7 +334,6 @@ def visualization_experiment(dataset_file,
 
     labels = [r'$v_x$ error', r'$v_y$ error', r'$v_z$ error']
     # t_vec = np.cumsum(dt_test)
-    t_vec = test_ds['timestamp']
     plt.figure()
     # mng = plt.get_current_fig_manager()
     # mng.resize(*mng.window.maxsize())

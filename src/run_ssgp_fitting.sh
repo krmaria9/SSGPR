@@ -25,13 +25,13 @@ do
 done
 
 dim_indices_2="10 11 12" # w
-# input_feats="4 5 6 7" # th
-# state_feats="7 8 9 10 11 12" # v, w
-aux_feats="0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15"
+input_feats="4 5 6 7" # th
+state_feats="7 8 9 10 11 12" # v, w
+# aux_feats="0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15"
 
 for i in $dim_indices_2
 do
     echo "Running with index $i..."
-    # python3 "$script_dir"/ssgp_fitting.py --train 1 --nbf $n_basis_functions --x $state_feats --u $input_feats --z $aux_feats --y $i --ds_name "20230910_185814-TRAIN-BEM"
-    python3 "$script_dir"/ssgp_fitting.py --train 1 --nbf $n_basis_functions --z $aux_feats --y $i --ds_name "20230910_185814-TRAIN-BEM"
+    python3 "$script_dir"/ssgp_fitting.py --train 1 --nbf $n_basis_functions --x $state_feats --u $input_feats --y $i --ds_name "20230910_185814-TRAIN-BEM"
+    # python3 "$script_dir"/ssgp_fitting.py --train 1 --nbf $n_basis_functions --z $aux_feats --y $i --ds_name "20230910_185814-TRAIN-BEM"
 done
