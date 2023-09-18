@@ -12,6 +12,7 @@ import shutil
 import os
 import random
 import matplotlib.pyplot as plt
+import random
 
 def stack_csv_files(directory_path):
     dfs = []  # List to store DataFrames
@@ -106,7 +107,7 @@ def create_steps_ahead_matrix(X, N, M):
     return np.hstack(parts)
 
 def main(x_features, u_features, z_features, reg_y_dim, dataset_name, x_cap, hist_bins, hist_thresh, nbf, train, n_restarts, maxiter):
-    save_dir = os.environ["SSGPR_PATH"] + "/data/" + "TEST_3"
+    save_dir = os.environ["SSGPR_PATH"] + "/data/" + "RUN_1"
     os.makedirs(save_dir,exist_ok=True)
     filename = 'ssgpr_model_' + str(reg_y_dim)
     save_path = os.path.join(save_dir, filename)
@@ -244,12 +245,22 @@ def main(x_features, u_features, z_features, reg_y_dim, dataset_name, x_cap, his
         # directory_path = os.environ["FLIGHTMARE_PATH"] + "/flightmpcc/saved_training/20230910_185814-TRAIN-BEM/traj"
         # filename = "eval_id_141_states_inputs_out.csv"
         
-        directory_path = os.environ["FLIGHTMARE_PATH"] + "/flightmpcc/saved_training/test"
-        filename = "eval_id_127_states_inputs_save_2.csv"
-        test_file = os.path.join(directory_path, filename)
+        # directory_path = os.environ["FLIGHTMARE_PATH"] + "/flightmpcc/saved_training/test"
+        # filename = "eval_id_127_states_inputs_save_2.csv"
+        # test_file = os.path.join(directory_path, filename)
+        
+        # Prepare data from csv file
+        dataset_name_1 = "20230917_234713-TRAIN-BEM"
+        dataset_name_2 = "20230918_071749-TRAIN-BEM"
+        directory_path = os.environ["FLIGHTMARE_PATH"] + "/flightmpcc/saved_training/" + dataset_name_1 + "/pred/"
+        for i in range(10):
+            eval_id = random.randint(0, 150)
+            filename = f"eval_id_{eval_id}_states_inputs_out.csv"
+            test_file = os.path.join(directory_path, filename)
+            save_file_path = save_path + f"_lem_{eval_id}"
 
-        visualization_experiment(test_file,x_cap=x_cap,hist_bins=hist_bins,hist_thresh=hist_thresh,
-                        x_vis_feats=x_features,u_vis_feats=u_features,z_vis_feats=z_features,y_vis_feats=reg_y_dim,save_file_path=save_path,ssgpr=ssgpr)
+            visualization_experiment(test_file,x_cap=x_cap,hist_bins=hist_bins,hist_thresh=hist_thresh,
+                            x_vis_feats=x_features,u_vis_feats=u_features,z_vis_feats=z_features,y_vis_feats=reg_y_dim,save_file_path=save_file_path,ssgpr=ssgpr)
     else:
         ValueError('train variable should be 0 or 1!')
 
@@ -285,4 +296,4 @@ if __name__ == '__main__':
     x_cap = Conf.velocity_cap
 
     main(x_features=args.x,u_features=args.u,z_features=args.z,reg_y_dim=args.y,dataset_name=args.ds_name,
-         x_cap=x_cap,hist_bins=hist_bins,hist_thresh=hist_thresh,nbf=args.nbf,train=args.train,n_restarts=1,maxiter=500)
+         x_cap=x_cap,hist_bins=hist_bins,hist_thresh=hist_thresh,nbf=args.nbf,train=args.train,n_restarts=1,maxiter=250)
