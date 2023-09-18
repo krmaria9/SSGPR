@@ -221,33 +221,56 @@ def plot_predictive_2D(path=None, X_train=None, Y_train=None, Xs1=None, Xs2=None
     plt.close()
     # plt.show()
 
-def visualize_error(path, X_test, Y_test, x_vis_feats, u_vis_feats, z_vis_feats):
-    feats = x_vis_feats + u_vis_feats
+def visualize_error(path, X_test, Y_test, Xs, mu, stddev, x_vis_feats, u_vis_feats, z_vis_feats):
+    feats = x_vis_feats + u_vis_feats + z_vis_feats
 
     # Visualize error over features
     if X_test.shape[1]==10:
         _, axs_error = plt.subplots(2, 5, figsize=(18, 6))
         axs_error = axs_error.flatten()
+    elif X_test.shape[1]==14:
+        _, axs_error = plt.subplots(2, 7, figsize=(18, 6))
+        axs_error = axs_error.flatten()
+    elif X_test.shape[1]==30:
+        _, axs_error = plt.subplots(5, 6, figsize=(18, 18))
+        axs_error = axs_error.flatten()
+    elif X_test.shape[1]==3:
+        _, axs_error = plt.subplots(1, 3, figsize=(18, 18))
+        axs_error = axs_error.flatten()
+        # velocity_magnitudes = np.linalg.norm(X_test, axis=1)
+        # X_test = np.column_stack((X_test, velocity_magnitudes))
+    elif X_test.shape[1]==1:
+        _, axs_error = plt.subplots(1, 1, figsize=(18, 18))
     else:
-        _, axs_error = plt.subplots(1, 3, figsize=(18, 6))
+        return
     
     for idx, i in enumerate(range(X_test.shape[1])):
-        # Scatter plot for training data error
-        axs_error[idx].scatter(X_test[:, i], Y_test, c='blue', marker='o', alpha=0.7, label='Test Error')
-        
-        # Scatter plot for test data error
-        # axs_error[idx].scatter(Xs[:, i], mu, c='red', marker='x', alpha=0.7, label='Predicted Error')
-
-        if i < len(x_vis_feats):
-            axs_error[idx].set_xlabel(f'x_{feats[i]}')
+        if X_test.shape[1] > 1:
+            # Scatter plot for training data error
+            axs_error[idx].scatter(X_test[:, i], Y_test, c='blue', marker='o', alpha=0.7, label='Test Error')
+            
+            # Scatter plot for test data error
+            axs_error[idx].scatter(Xs[:, i], mu, c='red', marker='x', alpha=0.7, label='Predicted Error')
+            axs_error[idx].grid(True)
         else:
-            axs_error[idx].set_xlabel(f'u_{feats[i]}')
-        axs_error[idx].set_ylabel('Error')
-        axs_error[idx].legend()
-        axs_error[idx].grid(True)
+            # Scatter plot for training data error
+            axs_error.scatter(X_test[:, i], Y_test, c='blue', marker='o', alpha=0.7, label='Test Error')
+            
+            # Scatter plot for test data error
+            axs_error.scatter(Xs[:, i], mu, c='red', marker='x', alpha=0.7, label='Predicted Error')
+            axs_error.grid(True)
+
+        # if i < len(x_vis_feats):
+        #     axs_error[idx].set_xlabel(f'x_{feats[i]}')
+        # elif i < len(x_vis_feats) + len(u_vis_feats):
+        #     axs_error[idx].set_xlabel(f'u_{feats[i]}')
+        # else:
+        #     axs_error[idx].set_xlabel(f'z_{feats[i]}')
+        # axs_error[idx].set_ylabel('Error')
+        # axs_error[idx].legend()
     
     plt.tight_layout()
-    plt.savefig(f"{path}_error.png")
+    plt.savefig(f"{path}_error.png",dpi=300)
     plt.close()
 
 # Adapted from gp_visualization (ros_gp_mpc)

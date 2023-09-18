@@ -45,7 +45,7 @@ def get_random_csv_path(directory_path, N=5, keyword="states_inputs_out_2.csv"):
 def compute_velocity(s):
     # Parse the string to a list of floats
     parsed_list = [float(item) for item in s.strip('[]').split(',')]
-    return np.sqrt(parsed_list[6]**2 + parsed_list[7]**2 + parsed_list[8]**2)
+    return np.sqrt(parsed_list[7]**2 + parsed_list[8]**2 + parsed_list[9]**2)
 
 def balance_dataset(df, save_dir):
     # Calculate the velocity magnitude for each row
@@ -53,8 +53,17 @@ def balance_dataset(df, save_dir):
     df['velocity_magnitude'] = df['state_in'].apply(compute_velocity)
     
     # Filter out rows with velocity magnitudes below 5
-    df = df[df['velocity_magnitude'] >= 5]
-    df = df[df['velocity_magnitude'] <= 20]
+    # df = df[df['velocity_magnitude'] >= 5]
+    # df = df[df['velocity_magnitude'] <= 20]
+    
+    # Discard outliers using IQR
+    Q1 = df['velocity_magnitude'].quantile(0.05)
+    Q3 = df['velocity_magnitude'].quantile(0.95)
+    IQR = Q3 - Q1
+    lower_bound = Q1 - 1.5 * IQR
+    upper_bound = Q3 + 1.5 * IQR
+
+    df = df[(df['velocity_magnitude'] >= lower_bound) & (df['velocity_magnitude'] <= upper_bound)]
 
     # Plotting the histogram before balancing
     plt.figure(figsize=(10, 5))
@@ -97,7 +106,7 @@ def create_steps_ahead_matrix(X, N, M):
     return np.hstack(parts)
 
 def main(x_features, u_features, z_features, reg_y_dim, dataset_name, x_cap, hist_bins, hist_thresh, nbf, train, n_restarts, maxiter):
-    save_dir = os.environ["SSGPR_PATH"] + "/data/" + "TEST_2"
+    save_dir = os.environ["SSGPR_PATH"] + "/data/" + "TEST_3"
     os.makedirs(save_dir,exist_ok=True)
     filename = 'ssgpr_model_' + str(reg_y_dim)
     save_path = os.path.join(save_dir, filename)
@@ -106,29 +115,44 @@ def main(x_features, u_features, z_features, reg_y_dim, dataset_name, x_cap, his
     if (train == 1):
         # Prepare data from dataset
         dataset_name_1 = "20230917_234713-TRAIN-BEM"
-        dataset_name_1 = "20230918_071749-TRAIN-BEM"
         dataset_path = os.environ['FLIGHTMARE_PATH'] + "/flightmpcc/saved_training/" + dataset_name_1 + "/pred/"
         df_train_1 = stack_csv_files(dataset_path)
-        # df_train_1 = df_train_1.sample(frac=1.0).reset_index(drop=True) # shuffle
         
-        # dataset_name_2 = "20230918_071749-TRAIN-BEM"
-        # dataset_path = os.environ['FLIGHTMARE_PATH'] + "/flightmpcc/saved_training/" + dataset_name_2 + "/pred/"
-        # df_train_2 = stack_csv_files(dataset_path)
-        # # df_train_2 = df_train_2.sample(frac=1.0).reset_index(drop=True) # shuffle
+        dataset_name_2 = "20230918_071749-TRAIN-BEM"
+        dataset_path = os.environ['FLIGHTMARE_PATH'] + "/flightmpcc/saved_training/" + dataset_name_2 + "/pred/"
+        df_train_2 = stack_csv_files(dataset_path)
         
-        # df_train = pd.concat([df_train_1, df_train_2], ignore_index=True)
-    
-        df_train = df_train_1
+        df_train = pd.concat([df_train_1, df_train_2], ignore_index=True)
 
         # df_train = balance_dataset(df_train, os.path.join(save_dir,f'histogram_{reg_y_dim}.png')) # doesn't seem to help
         
-        # # Prepare data from csv file
-        # directory_path = os.environ["FLIGHTMARE_PATH"] + "/flightmpcc/saved_training/test"
-        # filename = "eval_id_127_states_inputs_save_2.csv"
+        # Prepare data from csv file
+        directory_path = os.environ["FLIGHTMARE_PATH"] + "/flightmpcc/saved_training/" + dataset_name_1 + "/pred/"
+        filename = "eval_id_39_states_inputs_out.csv"
     
         # df_train = pd.read_csv(os.path.join(directory_path, filename))
         
-        df_train = df_train.sample(frac=0.25).reset_index(drop=True) # shuffle
+        max_samples = 8e4
+        ratio = max_samples/df_train.shape[0]
+        print(ratio)
+        
+        # df_train['velocity_magnitude'] = df_train['state_in'].apply(compute_velocity)
+        
+        df_train = df_train.sample(frac=ratio).reset_index(drop=True) # shuffle
+
+        # # Plotting the histogram before balancing
+        # plt.figure(figsize=(10, 5))
+        # plt.hist(df_train['velocity_magnitude'], bins=50, color='skyblue', edgecolor='black', alpha=0.7, label="Before Balancing")
+        # plt.hist(df_train_resampled['velocity_magnitude'], bins=50, color='salmon', edgecolor='black', alpha=0.5, label="After Balancing")
+        # plt.xlabel('Velocity Magnitude')
+        # plt.ylabel('Count')
+        # plt.legend()
+        # plt.tight_layout()
+        # plt.grid(axis='y')
+        # plt.savefig(os.path.join(save_dir,f'histogram_{reg_y_dim}.png'))
+        # plt.close()
+        
+        # df_train = df_train_resampled
 
         gp_dataset = GPDataset(df_train, x_features=x_features, u_features=u_features, z_features=z_features, y_dim=reg_y_dim,
                             cap=x_cap, n_bins=hist_bins, thresh=hist_thresh, visualize_data=False)
@@ -144,6 +168,7 @@ def main(x_features, u_features, z_features, reg_y_dim, dataset_name, x_cap, his
         # X_new = create_steps_ahead_matrix(X_init,n_steps_ahead,n_pred_samples)
         # Y_new = Y_init[n_steps_ahead*n_pred_samples:]
         
+        # Remove outliers
         threshold = 2  # or 3, depending on your preference
         mean_y = np.mean(Y_init)
         std_y = np.std(Y_init)
@@ -154,11 +179,6 @@ def main(x_features, u_features, z_features, reg_y_dim, dataset_name, x_cap, his
         X_new = X_init[mask]
         Y_new = Y_init[mask]
 
-        # X_new = X_init
-        # Y_new = Y_init
-        
-        print('X_init = ', X_init.shape, ', X_new = ', X_new.shape)
-
         # k = X_init.shape[1]
         
         # # Check that steps ahead were configured correctly
@@ -168,49 +188,52 @@ def main(x_features, u_features, z_features, reg_y_dim, dataset_name, x_cap, his
         #     end_col = (m + 1) * k
         #     assert np.array_equal(X_new[idx, start_col:end_col], X_init[idx + m*n_steps_ahead, :]), f"Mismatch at index {idx} for segment {m + 1}."
         
-        df = pd.DataFrame(X_new)
-        df['Y'] = Y_new
-        # df_sampled = df.sample(1.0).reset_index(drop=True)
-        df_sampled = df
+        # df = pd.DataFrame(X_new)
+        # df['Y'] = Y_new
+        # # df_sampled = df.sample(1.0).reset_index(drop=True)
+        # df_sampled = df
 
-        # Split the sampled dataframe back into X and Y
-        X = df_sampled.iloc[:, :-1].values
-        Y = (df_sampled['Y'].values).reshape(-1,1)
+        # # Split the sampled dataframe back into X and Y
+        # X = df_sampled.iloc[:, :-1].values
+        # Y = (df_sampled['Y'].values).reshape(-1,1)
+        
+        X = X_new
+        Y = Y_new
 
-        num_points = int(len(X)*0.8)
+        num_points = int(len(X)*0.7)
         X_train = X[:num_points,:]
         X_test = X[num_points:,:]
         Y_train = Y[:num_points,:]
         Y_test = Y[num_points:,:]
 
-        # # Create new instance
-        # ssgpr = SSGPR(num_basis_functions=nbf)
-        # ssgpr.add_data(X_train, Y_train, X_test, Y_test)
-        # ssgpr.optimize(save_path, restarts=n_restarts, maxiter=maxiter, verbose=True)
-        # ssgpr.save(f'{save_path}.pkl')
+        # Create new instance
+        ssgpr = SSGPR(num_basis_functions=nbf)
+        ssgpr.add_data(X_train, Y_train, X_test, Y_test)
+        ssgpr.optimize(save_path, restarts=n_restarts, maxiter=maxiter, verbose=True)
+        ssgpr.save(f'{save_path}.pkl')
         
-        # # Prediction
-        # mu, std, _, alpha = ssgpr.predict(X_test, sample_posterior=True)
-        # np.savetxt(f'{save_path}_alpha.csv', alpha, delimiter=",")
+        # Prediction
+        mu, std, _, alpha = ssgpr.predict(X_test, sample_posterior=True)
+        np.savetxt(f'{save_path}_alpha.csv', alpha, delimiter=",")
 
-        # # Evaluation
-        # NMSE, MNLP = ssgpr.evaluate_performance(save_path,restarts=n_restarts, maxiter=maxiter)
-        # print("Normalised mean squared error (NMSE): %.5f" % NMSE)
-        # print("Mean negative log probability (MNLP): %.5f" % MNLP)
+        # Evaluation
+        NMSE, MNLP = ssgpr.evaluate_performance(save_path,restarts=n_restarts, maxiter=maxiter)
+        print("Normalised mean squared error (NMSE): %.5f" % NMSE)
+        print("Mean negative log probability (MNLP): %.5f" % MNLP)
         
         # Some plotting
-        visualize_error(path=save_path, X_test=X_test, Y_test=Y_test, x_vis_feats=x_features,
-                        u_vis_feats=u_features,z_vis_feats=z_features)
+        visualize_error(path=save_path, X_test=X_test, Y_test=Y_test, Xs=X_test, mu=mu,
+                    stddev=std, x_vis_feats=x_features,u_vis_feats=u_features,z_vis_feats=z_features)
 
         # dataset_files = get_random_csv_path(dataset_path, N=40)
         # analyze_experiment(dataset_files,x_cap=x_cap,hist_bins=hist_bins,hist_thresh=hist_thresh,
         #                 x_vis_feats=x_features,u_vis_feats=u_features,z_vis_feats=z_features,y_vis_feats=reg_y_dim,save_file_path=save_path,ssgpr=ssgpr)
     
-        # test_file = os.path.join(directory_path, filename)
+        test_file = os.path.join(directory_path, filename)
 
-        # visualization_experiment(test_file,x_cap=x_cap,hist_bins=hist_bins,hist_thresh=hist_thresh,
-        #                 x_vis_feats=x_features,u_vis_feats=u_features,z_vis_feats=z_features,
-        #                 y_vis_feats=reg_y_dim,save_file_path=save_path,ssgpr=ssgpr)
+        visualization_experiment(test_file,x_cap=x_cap,hist_bins=hist_bins,hist_thresh=hist_thresh,
+                        x_vis_feats=x_features,u_vis_feats=u_features,z_vis_feats=z_features,
+                        y_vis_feats=reg_y_dim,save_file_path=save_path,ssgpr=ssgpr)
         
     elif (train == 0):
         # Load existing instance
