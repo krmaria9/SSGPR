@@ -97,7 +97,7 @@ def create_steps_ahead_matrix(X, N, M):
     return np.hstack(parts)
 
 def main(x_features, u_features, z_features, reg_y_dim, dataset_name, x_cap, hist_bins, hist_thresh, nbf, train, n_restarts, maxiter):
-    save_dir = os.environ["SSGPR_PATH"] + "/data/" + dataset_name + "_MULTI_TEST_11"
+    save_dir = os.environ["SSGPR_PATH"] + "/data/" + "eval_id_127_states_inputs_save_2"
     os.makedirs(save_dir,exist_ok=True)
     filename = 'ssgpr_model_' + str(reg_y_dim)
     save_path = os.path.join(save_dir, filename)
@@ -105,14 +105,15 @@ def main(x_features, u_features, z_features, reg_y_dim, dataset_name, x_cap, his
 
     if (train == 1):
         # Prepare data from dataset
-        dataset_path = os.environ['FLIGHTMARE_PATH'] + "/flightmpcc/saved_training/" + dataset_name + "/traj/"
+        # dataset_path = os.environ['FLIGHTMARE_PATH'] + "/flightmpcc/saved_training/" + dataset_name + "/data/"
         # df_train = stack_csv_files(dataset_path)
         # df_train = df_train.sample(frac=0.2).reset_index(drop=True) # shuffle
         # # df_train = balance_dataset(df_train, os.path.join(save_dir,f'histogram_{reg_y_dim}.png')) # doesn't seem to help
         
         # Prepare data from csv file
-        directory_path = os.environ["FLIGHTMARE_PATH"] + "/flightmpcc/saved_training/20230910_185814-TRAIN-BEM/traj"
-        filename = "eval_id_141_states_inputs_out_001.csv"
+        directory_path = os.environ["FLIGHTMARE_PATH"] + "/flightmpcc/saved_training/test"
+        filename = "eval_id_127_states_inputs_save_2.csv"
+    
         df_train = pd.read_csv(os.path.join(directory_path, filename))
         
         # df_train = df_train.sample(frac=1.0).reset_index(drop=True) # shuffle
@@ -124,23 +125,26 @@ def main(x_features, u_features, z_features, reg_y_dim, dataset_name, x_cap, his
         X_init = gp_dataset.get_x(cluster=0)
         Y_init = gp_dataset.get_y(cluster=0)
 
-        # Need to do this before sampling!!
-        n_steps_ahead = 10 # steps ahead
-        n_pred_samples = 7 # number of times to concatenate -> 0.35s of history
+        # # Need to do this before sampling!!
+        # n_steps_ahead = 10 # steps ahead
+        # n_pred_samples = 7 # number of times to concatenate -> 0.35s of history
 
-        X_new = create_steps_ahead_matrix(X_init,n_steps_ahead,n_pred_samples)
-        Y_new = Y_init[n_steps_ahead*n_pred_samples:]
+        # X_new = create_steps_ahead_matrix(X_init,n_steps_ahead,n_pred_samples)
+        # Y_new = Y_init[n_steps_ahead*n_pred_samples:]
+        
+        X_new = X_init
+        Y_new = Y_init
         
         print('X_init = ', X_init.shape, ', X_new = ', X_new.shape)
 
-        k = X_init.shape[1]
+        # k = X_init.shape[1]
         
-        # Check that steps ahead were configured correctly
-        idx = random.randint(0, len(X_new) - 1)
-        for m in range(n_pred_samples):
-            start_col = m * k
-            end_col = (m + 1) * k
-            assert np.array_equal(X_new[idx, start_col:end_col], X_init[idx + m*n_steps_ahead, :]), f"Mismatch at index {idx} for segment {m + 1}."
+        # # Check that steps ahead were configured correctly
+        # idx = random.randint(0, len(X_new) - 1)
+        # for m in range(n_pred_samples):
+        #     start_col = m * k
+        #     end_col = (m + 1) * k
+        #     assert np.array_equal(X_new[idx, start_col:end_col], X_init[idx + m*n_steps_ahead, :]), f"Mismatch at index {idx} for segment {m + 1}."
         
         df = pd.DataFrame(X_new)
         df['Y'] = Y_new
@@ -183,8 +187,7 @@ def main(x_features, u_features, z_features, reg_y_dim, dataset_name, x_cap, his
 
         visualization_experiment(test_file,x_cap=x_cap,hist_bins=hist_bins,hist_thresh=hist_thresh,
                         x_vis_feats=x_features,u_vis_feats=u_features,z_vis_feats=z_features,
-                        y_vis_feats=reg_y_dim,save_file_path=save_path,ssgpr=ssgpr,
-                        n_steps_ahead=n_steps_ahead, n_pred_samples=n_pred_samples)
+                        y_vis_feats=reg_y_dim,save_file_path=save_path,ssgpr=ssgpr)
         
     elif (train == 0):
         # Load existing instance
@@ -192,8 +195,11 @@ def main(x_features, u_features, z_features, reg_y_dim, dataset_name, x_cap, his
         
         # Some plotting
         # TODO (krmaria): draw more than one sample!
-        directory_path = os.environ["FLIGHTMARE_PATH"] + "/flightmpcc/saved_training/20230910_185814-TRAIN-BEM/traj"
-        filename = "eval_id_141_states_inputs_out.csv"
+        # directory_path = os.environ["FLIGHTMARE_PATH"] + "/flightmpcc/saved_training/20230910_185814-TRAIN-BEM/traj"
+        # filename = "eval_id_141_states_inputs_out.csv"
+        
+        directory_path = os.environ["FLIGHTMARE_PATH"] + "/flightmpcc/saved_training/test"
+        filename = "eval_id_127_states_inputs_save_2.csv"
         test_file = os.path.join(directory_path, filename)
 
         visualization_experiment(test_file,x_cap=x_cap,hist_bins=hist_bins,hist_thresh=hist_thresh,

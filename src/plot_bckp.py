@@ -254,7 +254,7 @@ def visualize_error(path, X_test, Y_test, Xs, mu, stddev, x_vis_feats, u_vis_fea
 def visualization_experiment(dataset_file,
                             x_cap, hist_bins, hist_thresh,
                             x_vis_feats, u_vis_feats, z_vis_feats, y_vis_feats,
-                            save_file_path, ssgpr,n_steps_ahead,n_pred_samples):
+                            save_file_path, ssgpr):
 
     # # #### GP ENSEMBLE LOADING #### #
     # if pre_set_gp is None:
@@ -301,11 +301,15 @@ def visualization_experiment(dataset_file,
     
     # X = np.concatenate((x_test[:,x_vis_feats], u_test[:,u_vis_feats], z_test[:,z_vis_feats]), axis=1)
 
-    X_new = create_steps_ahead_matrix(X_init,n_steps_ahead,n_pred_samples)
-    y_test = Y_init[n_steps_ahead*n_pred_samples:]
+    # X_new = create_steps_ahead_matrix(X_init,n_steps_ahead,n_pred_samples)
+    # y_test = Y_init[n_steps_ahead*n_pred_samples:]
     
-    t_vec = test_ds['timestamp'][n_steps_ahead*n_pred_samples:]
-    dt_test = dt_test[n_steps_ahead*n_pred_samples:]
+    # t_vec = test_ds['timestamp'][n_steps_ahead*n_pred_samples:]
+    # dt_test = dt_test[n_steps_ahead*n_pred_samples:]
+    
+    X_new = X_init
+    y_test = Y_init
+    t_vec = test_ds['timestamp']
 
     # #### EVALUATE GP ON TEST SET #### #
     mean_estimate, std_estimate, _, alpha = ssgpr.predict(X_new, sample_posterior=True)
