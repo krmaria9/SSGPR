@@ -221,7 +221,7 @@ def plot_predictive_2D(path=None, X_train=None, Y_train=None, Xs1=None, Xs2=None
     plt.close()
     # plt.show()
 
-def visualize_error(path, X_test, Y_test, Xs, mu, stddev, x_vis_feats, u_vis_feats, z_vis_feats):
+def visualize_error(path, X_test, Y_test, x_vis_feats, u_vis_feats, z_vis_feats):
     feats = x_vis_feats + u_vis_feats
 
     # Visualize error over features
@@ -236,7 +236,7 @@ def visualize_error(path, X_test, Y_test, Xs, mu, stddev, x_vis_feats, u_vis_fea
         axs_error[idx].scatter(X_test[:, i], Y_test, c='blue', marker='o', alpha=0.7, label='Test Error')
         
         # Scatter plot for test data error
-        axs_error[idx].scatter(Xs[:, i], mu, c='red', marker='x', alpha=0.7, label='Predicted Error')
+        # axs_error[idx].scatter(Xs[:, i], mu, c='red', marker='x', alpha=0.7, label='Predicted Error')
 
         if i < len(x_vis_feats):
             axs_error[idx].set_xlabel(f'x_{feats[i]}')
