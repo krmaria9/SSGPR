@@ -10,6 +10,7 @@ import pandas as pd
 from src.utils.utils import undo_jsonify
 from src.model_fitting.gp_common import world_to_body_velocity_mapping
 from matplotlib.ticker import AutoMinorLocator
+from scipy.signal import medfilt
 
 REMOVE_IDX = -10
 
@@ -235,7 +236,7 @@ def visualize_error(path, X_test, Y_test, Xs, mu, stddev, x_vis_feats, u_vis_fea
         _, axs_error = plt.subplots(5, 6, figsize=(18, 18))
         axs_error = axs_error.flatten()
     elif X_test.shape[1]==3:
-        _, axs_error = plt.subplots(1, 3, figsize=(18, 18))
+        _, axs_error = plt.subplots(1, 3, figsize=(18, 6))
         axs_error = axs_error.flatten()
         # velocity_magnitudes = np.linalg.norm(X_test, axis=1)
         # X_test = np.column_stack((X_test, velocity_magnitudes))
@@ -250,14 +251,16 @@ def visualize_error(path, X_test, Y_test, Xs, mu, stddev, x_vis_feats, u_vis_fea
             axs_error[idx].scatter(X_test[:, i], Y_test, c='blue', marker='o', alpha=0.7, label='Test Error')
             
             # Scatter plot for test data error
-            axs_error[idx].scatter(Xs[:, i], mu, c='red', marker='x', alpha=0.7, label='Predicted Error')
+            if mu is not None:
+                axs_error[idx].scatter(Xs[:, i], mu, c='red', marker='x', alpha=0.7, label='Predicted Error')
             axs_error[idx].grid(True)
         else:
             # Scatter plot for training data error
             axs_error.scatter(X_test[:, i], Y_test, c='blue', marker='o', alpha=0.7, label='Test Error')
             
             # Scatter plot for test data error
-            axs_error.scatter(Xs[:, i], mu, c='red', marker='x', alpha=0.7, label='Predicted Error')
+            if mu is not None:
+                axs_error.scatter(Xs[:, i], mu, c='red', marker='x', alpha=0.7, label='Predicted Error')
             axs_error.grid(True)
 
         # if i < len(x_vis_feats):
@@ -270,14 +273,14 @@ def visualize_error(path, X_test, Y_test, Xs, mu, stddev, x_vis_feats, u_vis_fea
         # axs_error[idx].legend()
     
     plt.tight_layout()
-    plt.savefig(f"{path}_error.png",dpi=300)
+    plt.savefig(f"{path}/error.png",dpi=300)
     plt.close()
 
 # Adapted from gp_visualization (ros_gp_mpc)
 def visualization_experiment(dataset_file,
                             x_cap, hist_bins, hist_thresh,
-                            x_vis_feats, u_vis_feats, z_vis_feats, y_vis_feats,
-                            save_file_path, ssgpr):
+                            x_vis_feats, u_vis_feats, y_vis_feats,
+                            save_file_path, ssgpr, alpha_train, alpha_all):
 
     # # #### GP ENSEMBLE LOADING #### #
     # if pre_set_gp is None:
@@ -335,25 +338,32 @@ def visualization_experiment(dataset_file,
     t_vec = test_ds['timestamp']
 
     # #### EVALUATE GP ON TEST SET #### #
-    mean_estimate, std_estimate, _, alpha = ssgpr.predict(X_new, sample_posterior=True)
-    # mean_estimate, std_estimate, _, alpha = ssgpr.predict(np.concatenate((x_test[:,x_vis_feats], u_test[:,u_vis_feats], z_test[:,z_vis_feats]), axis=1), sample_posterior=True)
-    # mean_estimate, std_estimate, _, alpha = ssgpr.predict(np.concatenate((x_test[:,x_vis_feats], u_test[:,u_vis_feats]), axis=1), sample_posterior=True)
+    mean_estimate, alpha = ssgpr.predict_maria(Xs=X_new, alpha=alpha_train) # alpha from training (is stored in class, doesn't take long to recompute)
+    mean_estimate_test, alpha_test = ssgpr.predict_maria(Xs=X_new, Ys=y_test) # alpha specific from run
+    mean_estimate_all, _ = ssgpr.predict_maria(Xs=X_new, alpha=alpha_all) # alpha from full dataset
 
-    mean_estimate *= dt_test[:, np.newaxis]
-    std_estimate *= dt_test[:, np.newaxis]
+    np.savetxt(f'{save_file_path}_alpha_test.csv', alpha_test, delimiter=",")
+
+    # mean_estimate *= dt_test[:, np.newaxis]
+    # std_estimate *= dt_test[:, np.newaxis]
     # mean_estimate_2 *= dt_test[:, np.newaxis]
 
     # Undo dt normalization
-    y_test *= dt_test[:, np.newaxis]
+    # y_test *= dt_test[:, np.newaxis]
+    # y_test = medfilt(y_test, kernel_size=3)
 
     # Error of nominal model
     nominal_diff = y_test
 
     # GP regresses model error, correct the predictions of the nominal model
     augmented_diff = nominal_diff - mean_estimate
+    augmented_diff_test = nominal_diff - mean_estimate_test
+    augmented_diff_all = nominal_diff - mean_estimate_all
 
     nominal_rmse = np.sqrt(np.mean(nominal_diff**2))
     augmented_rmse = np.sqrt(np.mean(augmented_diff**2))
+    augmented_rmse_test = np.sqrt(np.mean(augmented_diff_test**2))
+    augmented_rmse_all = np.sqrt(np.mean(augmented_diff_all**2))
 
     # TODO (krmaria): Torrente was using this
     # nominal_mae = np.mean(np.abs(nominal_diff), 0)
@@ -362,28 +372,34 @@ def visualization_experiment(dataset_file,
     labels = [r'$v_x$ error', r'$v_y$ error', r'$v_z$ error']
     # t_vec = np.cumsum(dt_test)
     plt.figure()
-    # mng = plt.get_current_fig_manager()
-    # mng.resize(*mng.window.maxsize())
-    for i in range(std_estimate.shape[1]):
-        plt.subplot(std_estimate.shape[1], 1, i+1)
+    for i in range(mean_estimate.shape[1]):
+        plt.subplot(mean_estimate.shape[1], 1, i + 1)
         plt.plot(t_vec, np.zeros(augmented_diff[:, i].shape), 'k')
-        plt.plot(t_vec, augmented_diff[:, i], 'b', label='augmented_err')
-        # plt.plot(t_vec, augmented_diff[:, i] - 3 * std_estimate[:, i], ':c')
-        # plt.plot(t_vec, augmented_diff[:, i] + 3 * std_estimate[:, i], ':c', label='3 std')
+        # plt.plot(t_vec, augmented_diff[:, i], 'b', label='augmented_err')
+        plt.plot(t_vec, augmented_diff_test[:, i], 'b', label='out - pred_test')
+        plt.plot(t_vec, augmented_diff_all[:, i], 'b', label='out - pred_all')
+
+        # # Fill area between -2*std and 2*std with lightgray color
+        # lower_bound = augmented_diff[:, i] - std_estimate[:, i]
+        # upper_bound = augmented_diff[:, i] + std_estimate[:, i]
+        # plt.fill_between(t_vec, lower_bound, upper_bound, color='lightgray')
+
         if nominal_diff is not None:
-            plt.plot(t_vec, nominal_diff[:, i], 'r', label='nominal_err')
-            plt.title('Dt: %.2f s. Nom RMSE: %.3f.  Aug RMSE: %.3f. Reduc: %.2f' % (
-                float(np.mean(dt_test)), nominal_rmse, augmented_rmse, augmented_rmse/nominal_rmse))
+            plt.plot(t_vec, nominal_diff[:, i], label='out')
+            plt.title('Dt: %.2f s. Nom RMSE: %.3f. \nReduc test: %.2f%%. Reduc all: %.2f%%' % (
+                float(np.mean(dt_test)), nominal_rmse,
+                (1 - augmented_rmse_test / nominal_rmse) * 1e2, (1 - augmented_rmse_all / nominal_rmse) * 1e2))
         else:
             plt.title('Dt: %.2f s. Aug RMSE: %.5f [m/s]' % (
                 float(np.mean(dt_test)), float(augmented_rmse)))
 
-        plt.plot(t_vec, mean_estimate, 'g', label='predicted_err')
-        # plt.plot(t_vec, mean_estimate_2, '--y', label='predicted_err_2')
+        # plt.plot(t_vec, mean_estimate, 'g', label='predicted_err')
+        plt.plot(t_vec, mean_estimate_test, label='pred_test')
+        plt.plot(t_vec, mean_estimate_all, label='ped_all')
         plt.ylabel(f'v_{y_vis_feats}')
         plt.legend()
 
-        if i == std_estimate.shape[1] - 1:
+        if i == mean_estimate.shape[1] - 1:
             plt.xlabel('time (s)')
 
     plt.tight_layout()
