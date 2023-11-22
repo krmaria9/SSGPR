@@ -12,26 +12,10 @@ export PYTHONPATH="${PYTHONPATH}:${grandparent_dir}"
 # Env variable for SSGPR
 export SSGPR_PATH=${grandparent_dir}
 
-# The first argument is the number of points, default value is 100
-n_basis_functions=${1:-40}
+n_basis_functions="40"
 
-# The rest of the arguments are the dimension indices, default values are "7 8 9"
-dim_indices="7 8 9" # v
-state_feats="7 8 9"
-for i in $dim_indices
-do
-    echo "Running with index $i..."
-    python3 "$script_dir"/ssgp_fitting.py --train 0 --nbf $n_basis_functions --x $dim_indices --y $i --ds_name "20230910_185814-TRAIN-BEM"
-done
-
-dim_indices_2="10 11 12" # w
 input_feats="4 5 6 7" # th, mot
 state_feats="7 8 9 10 11 12" # v, w
-aux_feats="0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15"
+output_feats="13 14 15 16 17 18" # force, torque
 
-for i in $dim_indices_2
-do
-    echo "Running with index $i..."
-    python3 "$script_dir"/ssgp_fitting.py --train 0 --nbf $n_basis_functions --x $state_feats --u $input_feats --y $i --ds_name "20230910_185814-TRAIN-BEM"
-    # python3 "$script_dir"/ssgp_fitting.py --train 1 --nbf $n_basis_functions --z $aux_feats --y $i --ds_name "20230910_185814-TRAIN-BEM"
-done
+python3 "$script_dir"/ssgp_fitting.py --train 1 --nbf $n_basis_functions --x $state_feats --u $input_feats --y $output_feats

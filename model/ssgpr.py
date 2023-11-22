@@ -130,7 +130,26 @@ class SSGPR:
             return mu, stddev, f_post, alpha
         else:
             return mu, stddev
-        
+
+    # function to make predictions on training points x (x must be in array format)
+    def predict_maria(self, Xs, Ys=None, alpha=None):
+        phi = self.tbf.design_matrix(self.X) # (279,20)
+        phi_star = self.tbf.design_matrix(Xs) # (399,20) -> (1,20)
+        if alpha is None:
+            # Use phi, y to compute alpha
+            if Ys is None:
+                A = (self.tbf.var_0/self.m) * phi.T @ phi + self.var_n * np.eye(2*self.m)
+                R = LA.cholesky(A).T
+                alpha = self.tbf.var_0 / self.m * LA.solve(R, LA.solve(R.T, phi.T@self.Y))
+            # Use phi_star, ys to compute alpha
+            else:
+                A = (self.tbf.var_0/self.m) * phi_star.T @ phi_star + self.var_n * np.eye(2*self.m)
+                R = LA.cholesky(A).T
+                alpha = self.tbf.var_0 / self.m * LA.solve(R, LA.solve(R.T, phi_star.T @ Ys))
+        mu = (phi_star @ alpha).reshape(-1,1) # predictive mean
+
+        return mu, alpha
+
     def predict_symbolic(self, Xs, type_function=False, num_samples=1):
         """
         Make symbolic predictions based on input Xs.
@@ -342,7 +361,7 @@ class SSGPR:
             # minimize
             X0 = np.hstack((lengthscales, amplitude, noise_variance, spectral_points)).reshape(-1,1)
             Xs, convergence, _, fX = minimize(self.objective_function, X0, length=maxiter, verbose=verbose, concise=True)
-            plot_convergence(save_dir + f"_conv_{restart}.png", fX)
+            plot_convergence(save_dir + f"/conv_{restart}.png", fX)
 
             # check if the local optimum beat the current global optimum
             if convergence < global_opt:
@@ -431,7 +450,7 @@ class SSGPR:
             pickle.dump(self, file)
 
         # Save also scaled frequencies
-        self.tbf.save_scaled_frequencies(filename.replace(".pkl", ".csv"))
+        self.tbf.save_scaled_frequencies(filename.replace(".pkl", "_freqs.csv"))
 
     @staticmethod
     def load(filename):

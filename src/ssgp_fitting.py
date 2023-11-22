@@ -4,16 +4,12 @@ import numpy as np
 import pandas as pd
 from model.ssgpr import SSGPR
 import os.path
-# from utils.plots import plot_predictive_1D, visualization_experiment, visualize_data
-from plot_bckp import visualization_experiment, visualize_error, analyze_experiment
-from src.model_fitting.gp_common import GPDataset, read_dataset
+from plot_bckp import visualize_error, visualization_experiment
+from src.model_fitting.gp_common import GPDataset
 from config.configuration_parameters import ModelFitConfig as Conf
-import shutil
 import os
-import random
-import matplotlib.pyplot as plt
-import random
 
+# TODO (krmaria): discard episodes which failed
 def stack_csv_files(directory_path):
     dfs = []  # List to store DataFrames
 
@@ -22,7 +18,7 @@ def stack_csv_files(directory_path):
         return None
 
     for filename in os.listdir(directory_path):
-        if "states_inputs_out.csv" in filename:
+        if "states_inputs.csv" in filename:
             file_path = os.path.join(directory_path, filename)
             dfs.append(pd.read_csv(file_path))
 
@@ -33,236 +29,135 @@ def stack_csv_files(directory_path):
     print(f"{(1-final_length/original_length):.2f} % of rows were dropped out of {original_length}")
     return result_df
 
-def get_random_csv_path(directory_path, N=5, keyword="states_inputs_out_2.csv"):
-    matching_files = [filename for filename in os.listdir(directory_path) if keyword in filename]
-    
-    if not matching_files:
-        print(f"No files found with keyword '{keyword}' in '{directory_path}'.")
-        return None
-
-    random_files = random.sample(matching_files, min(N, len(matching_files)))
-    return [os.path.join(directory_path, random_file) for random_file in random_files]
-
-def compute_velocity(s):
-    # Parse the string to a list of floats
-    parsed_list = [float(item) for item in s.strip('[]').split(',')]
-    return np.sqrt(parsed_list[7]**2 + parsed_list[8]**2 + parsed_list[9]**2)
-
-def balance_dataset(df, save_dir):
-    # Calculate the velocity magnitude for each row
-    original_length = len(df)
-    df['velocity_magnitude'] = df['state_in'].apply(compute_velocity)
-    
-    # Filter out rows with velocity magnitudes below 5
-    # df = df[df['velocity_magnitude'] >= 5]
-    # df = df[df['velocity_magnitude'] <= 20]
-    
-    # Discard outliers using IQR
-    Q1 = df['velocity_magnitude'].quantile(0.05)
-    Q3 = df['velocity_magnitude'].quantile(0.95)
-    IQR = Q3 - Q1
-    lower_bound = Q1 - 1.5 * IQR
-    upper_bound = Q3 + 1.5 * IQR
-
-    df = df[(df['velocity_magnitude'] >= lower_bound) & (df['velocity_magnitude'] <= upper_bound)]
-
-    # Plotting the histogram before balancing
-    plt.figure(figsize=(10, 5))
-    plt.hist(df['velocity_magnitude'], bins=50, color='skyblue', edgecolor='black', alpha=0.7, label="Before Balancing")
-
-    df['bins'] = pd.cut(df['velocity_magnitude'], bins=5, labels=False)
-    min_samples = df['bins'].value_counts().min()  # This makes sure all bins are equally represented
-    
-    # Sample that number of rows from each bin
-    dfs = []
-    for bin_label in df['bins'].unique():
-        sample_df = df[df['bins'] == bin_label].sample(min_samples)
-        dfs.append(sample_df)
-    balanced_df = pd.concat(dfs, axis=0).drop(columns=['bins']).reset_index(drop=True)
-
-    plt.hist(balanced_df['velocity_magnitude'], bins=50, color='salmon', edgecolor='black', alpha=0.5, label="After Balancing")
-    plt.xlabel('Velocity Magnitude')
-    plt.ylabel('Count')
-    plt.legend()
-    plt.tight_layout()
-    plt.grid(axis='y')
-    plt.savefig(save_dir)
-    plt.close()
-
-    final_length = len(balanced_df)
-    print(f"{(1-final_length/original_length):.2f} % of rows were dropped out of {original_length}")
-    return balanced_df
-
-def create_steps_ahead_matrix(X, N, M):
-    """
-    For a given matrix X, this function creates a new matrix by concatenating rows that are N steps ahead,
-    for M times.
-
-    :param X: The input matrix
-    :param N: Steps ahead
-    :param M: Number of times to concatenate
-    :return: New matrix
-    """
-    parts = [X[i:-N*M+i] for i in range(0, N*M, N)]
-    return np.hstack(parts)
-
-def main(x_features, u_features, z_features, reg_y_dim, dataset_name, x_cap, hist_bins, hist_thresh, nbf, train, n_restarts, maxiter):
-    save_dir = os.environ["SSGPR_PATH"] + "/data/" + "RUN_1"
+def main(x_features, u_features, reg_y_dim, x_cap, hist_bins, hist_thresh, nbf, train, n_restarts, maxiter):
+    save_dir = os.environ['FLIGHTMARE_PATH'] + "/externals/SSGPR/data/RUN_1"
     os.makedirs(save_dir,exist_ok=True)
-    filename = 'ssgpr_model_' + str(reg_y_dim)
-    save_path = os.path.join(save_dir, filename)
-    print(save_path)
+    base_path = os.environ['FLIGHTMARE_PATH'] + "/flightmpcc/saved_training/"
 
     if (train == 1):
-        # Prepare data from dataset
-        dataset_name_1 = "20230917_234713-TRAIN-BEM"
-        dataset_path = os.environ['FLIGHTMARE_PATH'] + "/flightmpcc/saved_training/" + dataset_name_1 + "/pred/"
-        df_train_1 = stack_csv_files(dataset_path)
-        
-        dataset_name_2 = "20230918_071749-TRAIN-BEM"
-        dataset_path = os.environ['FLIGHTMARE_PATH'] + "/flightmpcc/saved_training/" + dataset_name_2 + "/pred/"
-        df_train_2 = stack_csv_files(dataset_path)
-        
-        df_train = pd.concat([df_train_1, df_train_2], ignore_index=True)
+        # List of dataset names
+        dataset_names = ["20230917_234713-TRAIN-BEM", "20230918_071749-TRAIN-BEM"]
 
-        # df_train = balance_dataset(df_train, os.path.join(save_dir,f'histogram_{reg_y_dim}.png')) # doesn't seem to help
-        
-        # Prepare data from csv file
-        directory_path = os.environ["FLIGHTMARE_PATH"] + "/flightmpcc/saved_training/" + dataset_name_1 + "/pred/"
-        filename = "eval_id_39_states_inputs_out.csv"
-    
-        # df_train = pd.read_csv(os.path.join(directory_path, filename))
-        
-        max_samples = 8e4
+        # Load and concatenate DataFrames
+        df_list = []
+        for dataset in dataset_names:
+            dataset_path = base_path + dataset + "/nom/"
+            df = stack_csv_files(dataset_path)
+            df_list.append(df)
+
+        # Concatenate all DataFrames
+        df_train = pd.concat(df_list, ignore_index=True)
+
+        max_samples = 3e5
         ratio = max_samples/df_train.shape[0]
-        print(ratio)
-        
-        # df_train['velocity_magnitude'] = df_train['state_in'].apply(compute_velocity)
+        print(f'Take {ratio:.2f} samples from training set')
         
         df_train = df_train.sample(frac=ratio).reset_index(drop=True) # shuffle
 
-        # # Plotting the histogram before balancing
-        # plt.figure(figsize=(10, 5))
-        # plt.hist(df_train['velocity_magnitude'], bins=50, color='skyblue', edgecolor='black', alpha=0.7, label="Before Balancing")
-        # plt.hist(df_train_resampled['velocity_magnitude'], bins=50, color='salmon', edgecolor='black', alpha=0.5, label="After Balancing")
-        # plt.xlabel('Velocity Magnitude')
-        # plt.ylabel('Count')
-        # plt.legend()
-        # plt.tight_layout()
-        # plt.grid(axis='y')
-        # plt.savefig(os.path.join(save_dir,f'histogram_{reg_y_dim}.png'))
-        # plt.close()
-        
-        # df_train = df_train_resampled
-
-        gp_dataset = GPDataset(df_train, x_features=x_features, u_features=u_features, z_features=z_features, y_dim=reg_y_dim,
+        gp_dataset = GPDataset(df_train, x_features=x_features, u_features=u_features, y_dim=reg_y_dim,
                             cap=x_cap, n_bins=hist_bins, thresh=hist_thresh, visualize_data=False)
         gp_dataset.cluster(n_clusters=1, load_clusters=False, save_dir=save_dir, visualize_data=False)
-
-        X_init = gp_dataset.get_x(cluster=0)
-        Y_init = gp_dataset.get_y(cluster=0)
-
-        # # Need to do this before sampling!!
-        # n_steps_ahead = 10 # steps ahead
-        # n_pred_samples = 7 # number of times to concatenate -> 0.35s of history
-
-        # X_new = create_steps_ahead_matrix(X_init,n_steps_ahead,n_pred_samples)
-        # Y_new = Y_init[n_steps_ahead*n_pred_samples:]
-        
-        # Remove outliers
-        threshold = 2  # or 3, depending on your preference
-        mean_y = np.mean(Y_init)
-        std_y = np.std(Y_init)
-
-        mask = (Y_init > mean_y - threshold * std_y) & (Y_init < mean_y + threshold * std_y)
-        mask = mask.flatten()
-
-        X_new = X_init[mask]
-        Y_new = Y_init[mask]
-
-        # k = X_init.shape[1]
-        
-        # # Check that steps ahead were configured correctly
-        # idx = random.randint(0, len(X_new) - 1)
-        # for m in range(n_pred_samples):
-        #     start_col = m * k
-        #     end_col = (m + 1) * k
-        #     assert np.array_equal(X_new[idx, start_col:end_col], X_init[idx + m*n_steps_ahead, :]), f"Mismatch at index {idx} for segment {m + 1}."
-        
-        # df = pd.DataFrame(X_new)
-        # df['Y'] = Y_new
-        # # df_sampled = df.sample(1.0).reset_index(drop=True)
-        # df_sampled = df
-
-        # # Split the sampled dataframe back into X and Y
-        # X = df_sampled.iloc[:, :-1].values
-        # Y = (df_sampled['Y'].values).reshape(-1,1)
-        
-        X = X_new
-        Y = Y_new
-
-        num_points = int(len(X)*0.7)
-        X_train = X[:num_points,:]
-        X_test = X[num_points:,:]
-        Y_train = Y[:num_points,:]
-        Y_test = Y[num_points:,:]
-
-        # Create new instance
-        ssgpr = SSGPR(num_basis_functions=nbf)
-        ssgpr.add_data(X_train, Y_train, X_test, Y_test)
-        ssgpr.optimize(save_path, restarts=n_restarts, maxiter=maxiter, verbose=True)
-        ssgpr.save(f'{save_path}.pkl')
-        
-        # Prediction
-        mu, std, _, alpha = ssgpr.predict(X_test, sample_posterior=True)
-        np.savetxt(f'{save_path}_alpha.csv', alpha, delimiter=",")
-
-        # Evaluation
-        NMSE, MNLP = ssgpr.evaluate_performance(save_path,restarts=n_restarts, maxiter=maxiter)
-        print("Normalised mean squared error (NMSE): %.5f" % NMSE)
-        print("Mean negative log probability (MNLP): %.5f" % MNLP)
-        
-        # Some plotting
-        visualize_error(path=save_path, X_test=X_test, Y_test=Y_test, Xs=X_test, mu=mu,
-                    stddev=std, x_vis_feats=x_features,u_vis_feats=u_features,z_vis_feats=z_features)
-
-        # dataset_files = get_random_csv_path(dataset_path, N=40)
-        # analyze_experiment(dataset_files,x_cap=x_cap,hist_bins=hist_bins,hist_thresh=hist_thresh,
-        #                 x_vis_feats=x_features,u_vis_feats=u_features,z_vis_feats=z_features,y_vis_feats=reg_y_dim,save_file_path=save_path,ssgpr=ssgpr)
     
-        test_file = os.path.join(directory_path, filename)
+        X_init = gp_dataset.get_x(cluster=0)
+        
+        for y in reg_y_dim:
 
-        visualization_experiment(test_file,x_cap=x_cap,hist_bins=hist_bins,hist_thresh=hist_thresh,
-                        x_vis_feats=x_features,u_vis_feats=u_features,z_vis_feats=z_features,
-                        y_vis_feats=reg_y_dim,save_file_path=save_path,ssgpr=ssgpr)
+            filename = f'ssgpr_model_{y}'
+            save_path = os.path.join(save_dir, filename)
+            os.makedirs(save_path,exist_ok=True)
+
+            Y_init = gp_dataset.get_y(cluster=0, y_dim=y)
+            
+            # Remove outliers
+            threshold = 2  # number of std's
+            mean_y = np.mean(Y_init)
+            std_y = np.std(Y_init)
+
+            mask = (Y_init > mean_y - threshold * std_y) & (Y_init < mean_y + threshold * std_y)
+            mask = mask.flatten()
+            
+            X = X_init[mask]
+            Y = Y_init[mask]
+
+            # Split in train and validation sets
+            num_points = int(len(X)*0.7)
+            X_train = X[:num_points,:]
+            X_val = X[num_points:,:]
+            Y_train = Y[:num_points,:]
+            Y_val = Y[num_points:,:]
+
+            # Create new instance
+            ssgpr = SSGPR(num_basis_functions=nbf)
+            ssgpr.add_data(X_train, Y_train, X_val, Y_val)
+            ssgpr.optimize(save_path, restarts=n_restarts, maxiter=maxiter, verbose=True)
+            ssgpr.save(f'{save_path}.pkl')
+
+            mu, alpha_train = ssgpr.predict_maria(Xs=X_val)
+            # np.savetxt(f'{save_path}_alpha_train.csv', alpha_train, delimiter=",")
+            _, alpha_all = ssgpr.predict_maria(Xs=X_init, Ys=Y_init)
+            np.savetxt(f'{save_path}_alpha_all.csv', alpha_all, delimiter=",")
+            
+            # Some plotting
+            visualize_error(path=save_path, X_test=X_val, Y_test=Y_val, Xs=X_val, mu=mu,
+                        x_vis_feats=x_features,u_vis_feats=u_features)
+        
+            # Root path for the directories.
+            eval_ids = [12, 47, 78, 120, 165]
+            
+            for dataset in dataset_names:
+                directory_path = base_path + dataset + "/nom/"
+                for eval_id in eval_ids:
+                    filename = f"eval_id_{eval_id}_states_inputs.csv"
+                    test_file = os.path.join(directory_path, filename)
+
+                    visualization_experiment(
+                        test_file,
+                        x_cap=x_cap,
+                        hist_bins=hist_bins,
+                        hist_thresh=hist_thresh,
+                        x_vis_feats=x_features,
+                        u_vis_feats=u_features,
+                        y_vis_feats=y,
+                        save_file_path=f"{save_path}/{dataset}/eval_id_{eval_id}",
+                        ssgpr=ssgpr,
+                        alpha_all=alpha_all
+                    )
         
     elif (train == 0):
-        # Load existing instance
-        ssgpr = SSGPR.load(f'{save_path}.pkl')
-        
-        # Some plotting
-        # TODO (krmaria): draw more than one sample!
-        # directory_path = os.environ["FLIGHTMARE_PATH"] + "/flightmpcc/saved_training/20230910_185814-TRAIN-BEM/traj"
-        # filename = "eval_id_141_states_inputs_out.csv"
-        
-        # directory_path = os.environ["FLIGHTMARE_PATH"] + "/flightmpcc/saved_training/test"
-        # filename = "eval_id_127_states_inputs_save_2.csv"
-        # test_file = os.path.join(directory_path, filename)
-        
-        # Prepare data from csv file
-        dataset_name_1 = "20230917_234713-TRAIN-BEM"
-        dataset_name_2 = "20230918_071749-TRAIN-BEM"
-        directory_path = os.environ["FLIGHTMARE_PATH"] + "/flightmpcc/saved_training/" + dataset_name_1 + "/pred/"
-        for i in range(10):
-            eval_id = random.randint(0, 150)
-            filename = f"eval_id_{eval_id}_states_inputs_out.csv"
-            test_file = os.path.join(directory_path, filename)
-            save_file_path = save_path + f"_lem_{eval_id}"
 
-            visualization_experiment(test_file,x_cap=x_cap,hist_bins=hist_bins,hist_thresh=hist_thresh,
-                            x_vis_feats=x_features,u_vis_feats=u_features,z_vis_feats=z_features,y_vis_feats=reg_y_dim,save_file_path=save_file_path,ssgpr=ssgpr)
+        eval_ids = [12]
+
+        for y in reg_y_dim:
+
+            filename = f'ssgpr_model_{y}'
+            save_path = os.path.join(save_dir, filename)
+            os.makedirs(save_path,exist_ok=True)
+            
+            # Load existing instance
+            ssgpr = SSGPR.load(f'{save_path}.pkl')
+            alpha_all = np.loadtxt(f'{save_path}_alpha_all.csv')
+            os.makedirs(save_path,exist_ok=True)
+            
+            for dataset in dataset_names:
+                directory_path = base_path + dataset + "/nom/"
+                for eval_id in eval_ids:
+                    filename = f"eval_id_{eval_id}_states_inputs.csv"
+                    test_file = os.path.join(directory_path, filename)
+
+                    visualization_experiment(
+                        test_file,
+                        x_cap=x_cap,
+                        hist_bins=hist_bins,
+                        hist_thresh=hist_thresh,
+                        x_vis_feats=x_features,
+                        u_vis_feats=u_features,
+                        y_vis_feats=y,
+                        save_file_path=f"{save_path}/{dataset}/eval_id_{eval_id}",
+                        ssgpr=ssgpr,
+                        alpha_all=alpha_all
+                    )
     else:
-        ValueError('train variable should be 0 or 1!')
+        ValueError('Train should be 0 or 1!')
 
 if __name__ == '__main__':
 
@@ -277,23 +172,14 @@ if __name__ == '__main__':
 
     parser.add_argument('--u', nargs='+', type=int, default=[])
 
-    parser.add_argument('--z', nargs='+', type=int, default=[])
-
-    parser.add_argument("--y", type=int, default=7,
-                        help="Regression Y variable. Must be an integer between 0 and 12. Velocities xyz correspond to"
-                             "indices 7, 8, 9.")
-
-    parser.add_argument("--ds_name", type=str, required=True)
+    parser.add_argument("--y", nargs='+', type=int, default=[])
 
     args = parser.parse_args()
-
-    # Best so far (0.23 rmse): nbf=40, maxiter=400, sample=0.2, no dataset balancing
-    # Cheap (0.25 rmse): nbf=20, maxiter=200, sample=0.2, no dataset balancing
 
     # Stuff from Conf
     hist_bins = Conf.histogram_bins
     hist_thresh = Conf.histogram_threshold
     x_cap = Conf.velocity_cap
 
-    main(x_features=args.x,u_features=args.u,z_features=args.z,reg_y_dim=args.y,dataset_name=args.ds_name,
+    main(x_features=args.x,u_features=args.u,reg_y_dim=args.y,
          x_cap=x_cap,hist_bins=hist_bins,hist_thresh=hist_thresh,nbf=args.nbf,train=args.train,n_restarts=1,maxiter=250)
