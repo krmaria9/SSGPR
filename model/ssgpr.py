@@ -5,7 +5,7 @@ from optimizer.minimize import minimize
 import numpy.linalg as LA
 import pickle
 import os
-from plot_bckp import plot_convergence
+import matplotlib.pyplot as plt
 
 class SSGPR:
     """
@@ -76,79 +76,38 @@ class SSGPR:
         self.tbf.update_frequencies(params[self.D + 2:])       # update the TBF spectral frequencies
 
     # function to make predictions on training points x (x must be in array format)
-    def predict(self, Xs, sample_posterior=False, num_samples=1):
-        """
-        Predict on new inputs with the posterior predictive.
+    def predict(self, Xs, Ys=None):
+        phi = self.tbf.design_matrix(self.X)
+        phi_star = self.tbf.design_matrix(Xs)
 
-        Parameters
-        ----------
-        Xs : numpy array of shape (N, D)
-            New data inputs where N is the number of new data points and D is the
-            dimensionality of the data.
+        # Use phi, y to compute alpha
+        if Ys is None:
+            A = (self.tbf.var_0/self.m) * phi.T @ phi + self.var_n * np.eye(2*self.m)
+            R = LA.cholesky(A).T
 
-        sample_posterior : bool
-            If true, predict returns num_samples drawn from the posterior distribution
-            over the model parameters (weights). Default is False.
+            alpha = self.tbf.var_0 / self.m * LA.solve(R, LA.solve(R.T, phi.T @ self.Y))
+            var =(self.var_n * (1 + self.tbf.var_0/self.m * np.sum((phi_star @ LA.inv(R))**2, axis=1))).reshape(-1,1)
+            stddev = np.sqrt(var) # predictive std dev
 
-        num_samples : int
-            Number of samples to draw from the posterior distribution over the model
-            parameters (weights).
-
-        Return
-        ------
-        mu : numpy array of shape (N, 1)
-            Predictive mean where N is the number of new data points (Xs.shape[0])
-
-        stddev : numpy array of shape (N, 1)
-            Predictive standard deviation where N is the number of new data points.
-
-        f_post : numpy array of shape (N, num_samples)
-            num_samples samples from the posterior distribution over the model parameters
-            (weights). f_post is only returned if sample_posterior = True.
-        """
-
-        # calculate some useful constants
-        # self.X has shape (279,3)
-        # Xs has shape (399,3)
-        phi = self.tbf.design_matrix(self.X) # (279,20)
-        phi_star = self.tbf.design_matrix(Xs) # (399,20) -> (1,20)
-        A = (self.tbf.var_0/self.m) * phi.T @ phi + self.var_n * np.eye(2*self.m)
-        R = LA.cholesky(A).T
-        
-        alpha = self.tbf.var_0 / self.m * LA.solve(R, LA.solve(R.T, phi.T@self.Y)) # (20,1)
-        # mu = (phi_star @ alpha + self.Y_mean).reshape(-1,1) # predictive mean
-        mu = (phi_star @ alpha).reshape(-1,1) # predictive mean
-        var =(self.var_n * (1 + self.tbf.var_0/self.m * np.sum((phi_star @ LA.inv(R))**2, axis=1))).reshape(-1,1)
-        stddev = np.sqrt(var) # predictive std dev
-
-        if sample_posterior:
-            SN = LA.inv(A) * (self.var_n * self.tbf.var_0 / self.m)
-            mN = LA.solve(R, LA.solve(R.T, phi.T @ self.Y)) * (self.tbf.var_0 / self.m)
-            W = np.random.multivariate_normal(mN.flatten(), SN, num_samples).T
-            # f_post = phi_star @ W + self.Y_mean
-            f_post = phi_star @ W
-            return mu, stddev, f_post, alpha
+        # Use phi_star, ys to compute alpha
         else:
-            return mu, stddev
+            A = (self.tbf.var_0/self.m) * phi_star.T @ phi_star + self.var_n * np.eye(2*self.m)
+            R = LA.cholesky(A).T
 
-    # function to make predictions on training points x (x must be in array format)
-    def predict_maria(self, Xs, Ys=None, alpha=None):
-        phi = self.tbf.design_matrix(self.X) # (279,20)
-        phi_star = self.tbf.design_matrix(Xs) # (399,20) -> (1,20)
-        if alpha is None:
-            # Use phi, y to compute alpha
-            if Ys is None:
-                A = (self.tbf.var_0/self.m) * phi.T @ phi + self.var_n * np.eye(2*self.m)
-                R = LA.cholesky(A).T
-                alpha = self.tbf.var_0 / self.m * LA.solve(R, LA.solve(R.T, phi.T@self.Y))
-            # Use phi_star, ys to compute alpha
-            else:
-                A = (self.tbf.var_0/self.m) * phi_star.T @ phi_star + self.var_n * np.eye(2*self.m)
-                R = LA.cholesky(A).T
-                alpha = self.tbf.var_0 / self.m * LA.solve(R, LA.solve(R.T, phi_star.T @ Ys))
+            alpha = self.tbf.var_0 / self.m * LA.solve(R, LA.solve(R.T, phi_star.T @ Ys))
+            var =(self.var_n * (1 + self.tbf.var_0/self.m * np.sum((phi_star @ LA.inv(R))**2, axis=1))).reshape(-1,1)
+            stddev = np.sqrt(var) # predictive std dev
+    
         mu = (phi_star @ alpha).reshape(-1,1) # predictive mean
 
-        return mu, alpha
+        return mu, stddev, alpha
+    
+    def evaluate_prediction(self, Xs, alpha):
+        phi_star = self.tbf.design_matrix(Xs)
+
+        mu = (phi_star @ alpha).reshape(-1,1) # predictive mean
+
+        return mu
 
     def predict_symbolic(self, Xs, type_function=False, num_samples=1):
         """
@@ -361,7 +320,7 @@ class SSGPR:
             # minimize
             X0 = np.hstack((lengthscales, amplitude, noise_variance, spectral_points)).reshape(-1,1)
             Xs, convergence, _, fX = minimize(self.objective_function, X0, length=maxiter, verbose=verbose, concise=True)
-            plot_convergence(save_dir + f"/conv_{restart}.png", fX)
+            self.plot_convergence(save_dir + f"/conv_{restart}.png", fX)
 
             # check if the local optimum beat the current global optimum
             if convergence < global_opt:
@@ -432,7 +391,7 @@ class SSGPR:
         if not self.optimized:
             self.optimize(save_dir, restarts=restarts, maxiter=maxiter, verbose=False)
 
-        mu, stddev = self.predict(self.X_test) # predict on the test points
+        mu, stddev, _ = self.predict(self.X_test) # predict on the test points
 
         NMSE = ((mu - self.Y_test) ** 2).mean() / ((self.Y.mean() - self.Y_test) ** 2).mean()
         MNLP = -0.5 * (-((mu - self.Y_test) ** 2.) / stddev ** 2 - np.log(2 * np.pi) - np.log(stddev ** 2)).mean()
@@ -468,3 +427,18 @@ class SSGPR:
 
         with open(filename, 'rb') as file:
             return pickle.load(file)
+
+    def plot_convergence(self, path, convergence):
+        N = convergence.shape[0]
+        X = np.arange(N)
+        Y = convergence[:,0]
+        plt.figure()
+        plt.plot(X, Y)
+        plt.grid()
+        plt.ylabel("Negative marginal log likelihood")
+        plt.xlabel("Number of iterations")
+        plt.autoscale(enable=True, axis='x', tight=True)
+        plt.tight_layout()
+        plt.grid(True)
+        plt.savefig(path, dpi=300)
+        plt.close()

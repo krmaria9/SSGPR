@@ -1,12 +1,10 @@
 import argparse
-import sys
 import numpy as np
 import pandas as pd
 from model.ssgpr import SSGPR
 import os.path
-from plot_bckp import visualize_error, visualization_experiment
-from src.model_fitting.gp_common import GPDataset
-from config.configuration_parameters import ModelFitConfig as Conf
+from utils import visualize_error, visualization_experiment
+from dataset import Dataset
 import os
 
 # TODO (krmaria): discard episodes which failed
@@ -30,7 +28,7 @@ def stack_csv_files(directory_path):
     return result_df
 
 def main(x_features, u_features, reg_y_dim, x_cap, hist_bins, hist_thresh, nbf, train, n_restarts, maxiter):
-    save_dir = os.environ['FLIGHTMARE_PATH'] + "/externals/SSGPR/data/RUN_1"
+    save_dir = os.environ['FLIGHTMARE_PATH'] + "/externals/SSGPR/data/RUN_2"
     os.makedirs(save_dir,exist_ok=True)
     base_path = os.environ['FLIGHTMARE_PATH'] + "/flightmpcc/saved_training/"
 
@@ -50,15 +48,15 @@ def main(x_features, u_features, reg_y_dim, x_cap, hist_bins, hist_thresh, nbf, 
 
         max_samples = 3e5
         ratio = max_samples/df_train.shape[0]
+
         print(f'Take {ratio:.2f} samples from training set')
         
         df_train = df_train.sample(frac=ratio).reset_index(drop=True) # shuffle
 
-        gp_dataset = GPDataset(df_train, x_features=x_features, u_features=u_features, y_dim=reg_y_dim,
+        gp_dataset = Dataset(df_train, x_features=x_features, u_features=u_features, y_dim=reg_y_dim,
                             cap=x_cap, n_bins=hist_bins, thresh=hist_thresh, visualize_data=False)
-        gp_dataset.cluster(n_clusters=1, load_clusters=False, save_dir=save_dir, visualize_data=False)
     
-        X_init = gp_dataset.get_x(cluster=0)
+        X_init = gp_dataset.get_x()
         
         for y in reg_y_dim:
 
@@ -66,7 +64,7 @@ def main(x_features, u_features, reg_y_dim, x_cap, hist_bins, hist_thresh, nbf, 
             save_path = os.path.join(save_dir, filename)
             os.makedirs(save_path,exist_ok=True)
 
-            Y_init = gp_dataset.get_y(cluster=0, y_dim=y)
+            Y_init = gp_dataset.get_y(y_dim=y)
             
             # Remove outliers
             threshold = 2  # number of std's
@@ -92,9 +90,9 @@ def main(x_features, u_features, reg_y_dim, x_cap, hist_bins, hist_thresh, nbf, 
             ssgpr.optimize(save_path, restarts=n_restarts, maxiter=maxiter, verbose=True)
             ssgpr.save(f'{save_path}.pkl')
 
-            mu, alpha_train = ssgpr.predict_maria(Xs=X_val)
+            mu, _, _ = ssgpr.predict(Xs=X_val)
             # np.savetxt(f'{save_path}_alpha_train.csv', alpha_train, delimiter=",")
-            _, alpha_all = ssgpr.predict_maria(Xs=X_init, Ys=Y_init)
+            _, _, alpha_all = ssgpr.predict(Xs=X_init, Ys=Y_init)
             np.savetxt(f'{save_path}_alpha_all.csv', alpha_all, delimiter=",")
             
             # Some plotting
@@ -165,8 +163,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--train', type=int, default="1")
 
-    parser.add_argument("--nbf", type=int, default="20",
-                        help="Number of basis functions to use for the SSGP approximation")
+    parser.add_argument("--nbf", type=int, default="20")
 
     parser.add_argument('--x', nargs='+', type=int, default=[])
 
@@ -176,10 +173,5 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    # Stuff from Conf
-    hist_bins = Conf.histogram_bins
-    hist_thresh = Conf.histogram_threshold
-    x_cap = Conf.velocity_cap
-
     main(x_features=args.x,u_features=args.u,reg_y_dim=args.y,
-         x_cap=x_cap,hist_bins=hist_bins,hist_thresh=hist_thresh,nbf=args.nbf,train=args.train,n_restarts=1,maxiter=250)
+         x_cap=16,hist_bins=40,hist_thresh=1e-3,nbf=args.nbf,train=args.train,n_restarts=1,maxiter=250)
