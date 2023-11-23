@@ -23,7 +23,6 @@ def rotate_quat(q, v):
     q_conj = np.array([q[0], -q[1], -q[2], -q[3]])
     return quat_mult(quat_mult(q, np.insert(v, 0, 0)), q_conj)[1:]
 
-# TODO (krmaria): if we use this correction, i.e. the optimal correction, do we retrieve the correct state?
 def augment_x_seq(t_seq, x_seq, u_seq, p):
     augmented_x_seq = []
 
@@ -68,13 +67,11 @@ def augment_x_seq(t_seq, x_seq, u_seq, p):
 
 def load_sequence(df, dt):
     first_case_columns = ["px", "py", "pz", "qw", "qx", "qy", "qz", "vx", "vy", "vz", "wx", "wy", "wz", "th0", "th1", "th2", "th3", "motw", "motx", "moty", "motz"]
+    # first_case_columns = ["px", "py", "pz", "qw", "qx", "qy", "qz", "vx", "vy", "vz", "wx", "wy", "wz", "motw", "motx", "moty", "motz"]
+    # first_case_columns = ["px", "py", "pz", "qw", "qx", "qy", "qz", "vx", "vy", "vz", "wx", "wy", "wz", "th0", "th1", "th2", "th3"]
     is_first_case = all(col in df.columns for col in first_case_columns)
-    
-    # TODO (krmaria): when do we use second_case?
-    second_case_columns = ["timestamp", "state_in", "input_in"]
-    is_second_case = all(col in df.columns for col in second_case_columns)
 
-    if not is_first_case and not is_second_case:
+    if not is_first_case:
         raise ValueError("Wrong columns in dataframe")
 
     if is_first_case:
@@ -82,22 +79,16 @@ def load_sequence(df, dt):
         df_interpolated = pd.DataFrame({
             't': uniform_time
         })
-        for col in df.columns:
-            if col != 't':
-                df_interpolated[col] = np.interp(uniform_time, df['t'], df[col])
+        for col in first_case_columns:
+            df_interpolated[col] = np.interp(uniform_time, df['t'], df[col])
 
         df = df_interpolated
 
         t_seq = np.array(df['t'])
         x_seq = df[["px", "py", "pz", "qw", "qx", "qy", "qz", "vx", "vy", "vz", "wx", "wy", "wz"]].values
         u_seq = np.concatenate((df[["th0", "th1", "th2", "th3"]].values, df[["motw", "motx", "moty", "motz"]].values), axis=1)
-
-    elif is_second_case:
-        t_seq = np.array(df['timestamp'])
-        state_in = df['state_in'].apply(lambda x: [float(i) for i in x.strip("[]").split(", ")]).tolist()
-        x_seq = np.array(state_in) 
-        input_in = df['input_in'].apply(lambda x: [float(i) for i in x.strip("[]").split(", ")]).tolist()
-        u_seq = np.array(input_in)
+        # u_seq = df[["motw", "motx", "moty", "motz"]].values
+        # u_seq = df[["th0", "th1", "th2", "th3"]].values
 
     return x_seq, u_seq, t_seq
 
@@ -180,7 +171,7 @@ def format_to_csv(x_seq, u_seq, x_out_nominal, x_dot_out_nominal, reg_dot_out_no
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
 
-        for i in range(t_seq.shape[0]-2): # TODO (krmaria): or -2?
+        for i in range(t_seq.shape[0]-2):
             row_data = {
                 'index': i,
                 'timestamp': f"{t_seq[i]:.{5}g}",
@@ -217,16 +208,16 @@ def predict_dynamics(input_file, output_file, model_flags, sample_dt, t_open_loo
     params_file = os.environ["AGI_PATH"] + "/agiros/agiros/parameters/quads/kingfisher.yaml"
     params = load_params(params_file)
 
-    # TODO (krmaria): move this to yaml file??
-    params.ssgp_path = os.environ["FLIGHTMARE_PATH"] + '/externals/SSGPR/data/' + "RUN_1"
+    # params.ssgp_path = os.environ["FLIGHTMARE_PATH"] + "/externals/SSGPR/data/RUN_4" # th
+    params.ssgp_path = os.environ["FLIGHTMARE_PATH"] + "/externals/SSGPR/data/RUN_5" # mot
 
     # Augment state with thrust force and torque
     x_seq = augment_x_seq(t_seq, x_seq, u_seq, params)
 
     # Prepare integrator
-    x = ca.SX.sym('x', STATE_DIM)
-    reg = ca.SX.sym('reg', STATE_DIM + 6)
-    u = ca.SX.sym('u', INPUT_DIM)
+    x = ca.MX.sym('x', STATE_DIM)
+    reg = ca.MX.sym('reg', STATE_DIM + 6)
+    u = ca.MX.sym('u', INPUT_DIM)
     h = sample_dt
     internal_dt = 1e-3 # s
     opts = {'number_of_finite_elements': int(h/internal_dt)}
@@ -285,11 +276,10 @@ def main():
     freq = 100 # Hz
     sample_dt = 1/freq # s, the interpolation timestep, i.e. timestep between two samples
 
-    t_open_loop = 2.5 # s, timestamp at which the open loop prediction starts
+    t_open_loop = 8 # s, timestamp at which the open loop prediction starts
     
     # List of dataset names
-    dataset_names = ["20230917_234713-TRAIN-BEM", "20230918_071749-TRAIN-BEM"]
-    # dataset_names = ["20230917_234713-TRAIN-BEM"]
+    dataset_names = ["20231122_183045-TRAIN-BEM", "20231122_194206-TRAIN-BEM"]
 
     # Base path
     base_path = os.environ['FLIGHTMARE_PATH'] + "/flightmpcc/saved_training/"
@@ -301,9 +291,9 @@ def main():
     #         if "states_inputs.csv" in filename:
     #             input_file = os.path.join(dataset_path, filename)
     #             if model_flags['USE_SSGP']:
-    #                 output_file = input_file.replace("traj","ssgp")
+    #                 output_file = input_file.replace("traj","ssgp_mot")
     #             else:
-    #                 output_file = input_file.replace("traj","nom")
+    #                 output_file = input_file.replace("traj","nom_mot")
                     
     #             # Create the directory if it doesn't exist
     #             os.makedirs(os.path.dirname(output_file), exist_ok=True)
@@ -311,7 +301,7 @@ def main():
     #             predict_dynamics(input_file, output_file, model_flags, sample_dt, t_open_loop)
     #             print(output_file)
 
-    eval_ids = [12, 47]
+    eval_ids = [12, 47, 78, 120, 165]
 
     for dataset_name in dataset_names:
         dataset_path = base_path + dataset_name + "/traj"
@@ -319,19 +309,17 @@ def main():
             filename = f"eval_id_{eval_id}_states_inputs.csv"
             input_file = os.path.join(dataset_path, filename)
             if model_flags['USE_SSGP']:
-                output_file = input_file.replace("traj","ssgp")
+                output_file = input_file.replace("traj","ssgp_mot")
             else:
-                output_file = input_file.replace("traj","nom")
+                output_file = input_file.replace("traj","nom_mot")
                 
             # Create the directory if it doesn't exist
             os.makedirs(os.path.dirname(output_file), exist_ok=True)
             
             predict_dynamics(input_file, output_file, model_flags, sample_dt, t_open_loop)
             plot_states(output_file, plot_flags, states_indices=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
+            # plot_states(output_file, plot_flags, states_indices=[13, 14, 15, 16, 17, 18])
             print(output_file)
-
-    # TODO (krmaria): move this somewhere else
-    # plot_states(output_file, plot_flags, states_indices=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
 
 if __name__ == "__main__":
     main()

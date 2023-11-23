@@ -68,6 +68,7 @@ def load_params(yaml_path):
     p.cd = ca.vertcat(*data['aero_coeff_1'], *data['aero_coeff_3'], data['aero_coeff_h'])
     p.motor_omega_max = data['motor_omega_max']
     p.motor_omega_min = data['motor_omega_min']
+    p.thrust_map = data['thrust_map']
     p.reg_y = data["reg_y"]
     p.t_BM = ca.horzcat(ca.vertcat(*data['tbm_fr']),
                     ca.vertcat(*data['tbm_bl']),
@@ -127,40 +128,40 @@ def phi_function(x, u, W, y):
         raise ValueError('y not in valid reg_y range')
 
     NBF = W.shape[0] # number of basis functions
-    phi = ca.SX.zeros(2 * NBF)
+    phi = ca.MX.zeros(2 * NBF)
     phi[:NBF] = ca.cos(ca.mtimes(W, input_feats))
     phi[NBF:] = ca.sin(ca.mtimes(W, input_feats))
 
     return phi
 
-def dynamics(x, u, p):
+def dynamics(x, u, params):
 
     q = x[3:7] # From body to world
     v = x[7:10]
     w = x[10:13]
 
-    inertia = ca.SX.eye(3)
-    inertia[0,0] = p.inertia_diag[0]
-    inertia[1,1] = p.inertia_diag[1]
-    inertia[2,2] = p.inertia_diag[2]
+    inertia = ca.MX.eye(3)
+    inertia[0,0] = params.inertia_diag[0]
+    inertia[1,1] = params.inertia_diag[1]
+    inertia[2,2] = params.inertia_diag[2]
 
-    inertia_inv = ca.SX.eye(3)
-    inertia_inv[0,0] = 1/p.inertia_diag[0]
-    inertia_inv[1,1] = 1/p.inertia_diag[1]
-    inertia_inv[2,2] = 1/p.inertia_diag[2]
+    inertia_inv = ca.MX.eye(3)
+    inertia_inv[0,0] = 1/params.inertia_diag[0]
+    inertia_inv[1,1] = 1/params.inertia_diag[1]
+    inertia_inv[2,2] = 1/params.inertia_diag[2]
 
     # Aerodynamics:
     q_conj = ca.vertcat(q[0,:], -q[1,:], -q[2, :], -q[3, :]) # From world to body
     v_B = rotate_quat(q_conj, v)
-    Fd_B = ca.vertcat(p.cd[0] * v_B[0] + p.cd[3] * v_B[0]**3,
-                      p.cd[1] * v_B[1] + p.cd[4] * v_B[1]**3,
-                      p.cd[2] * v_B[2] + p.cd[5] * v_B[2]**3 - p.cd[6] * (v_B[0]**2 + v_B[1]**2))
+    Fd_B = ca.vertcat(params.cd[0] * v_B[0] + params.cd[3] * v_B[0]**3,
+                      params.cd[1] * v_B[1] + params.cd[4] * v_B[1]**3,
+                      params.cd[2] * v_B[2] + params.cd[5] * v_B[2]**3 - params.cd[6] * (v_B[0]**2 + v_B[1]**2))
     Fd_W = rotate_quat(q, Fd_B)
 
     f_nominal = ca.vertcat(
         v,                               # p_dot
         0.5*quat_mult(q, ca.vertcat(0, w)),  # q_dot
-        rotate_quat(q, ca.vertcat(0, 0, 0)) + p.g - Fd_W/p.mass,  # v_dot
+        rotate_quat(q, ca.vertcat(0, 0, 0)) + params.g - Fd_W/params.mass,  # v_dot
         ca.mtimes(inertia_inv, ca.vertcat(                                 # w_dot
             0,
             0,
@@ -170,75 +171,75 @@ def dynamics(x, u, p):
     
     return f_nominal
 
-def dynamics_simple(x, u, p):
+def dynamics_simple(x, u, params):
 
     q = x[3:7] # From body to world
     v = x[7:10]
     w = x[10:13]
 
-    inertia = ca.SX.eye(3)
-    inertia[0,0] = p.inertia_diag[0]
-    inertia[1,1] = p.inertia_diag[1]
-    inertia[2,2] = p.inertia_diag[2]
+    inertia = ca.MX.eye(3)
+    inertia[0,0] = params.inertia_diag[0]
+    inertia[1,1] = params.inertia_diag[1]
+    inertia[2,2] = params.inertia_diag[2]
 
-    inertia_inv = ca.SX.eye(3)
-    inertia_inv[0,0] = 1/p.inertia_diag[0]
-    inertia_inv[1,1] = 1/p.inertia_diag[1]
-    inertia_inv[2,2] = 1/p.inertia_diag[2]
+    inertia_inv = ca.MX.eye(3)
+    inertia_inv[0,0] = 1/params.inertia_diag[0]
+    inertia_inv[1,1] = 1/params.inertia_diag[1]
+    inertia_inv[2,2] = 1/params.inertia_diag[2]
 
     # Aerodynamics:
     q_conj = ca.vertcat(q[0,:], -q[1,:], -q[2, :], -q[3, :]) # From world to body
     v_B = rotate_quat(q_conj, v)
-    Fd_B = ca.vertcat(p.cd[0] * v_B[0] + p.cd[3] * v_B[0]**3,
-                      p.cd[1] * v_B[1] + p.cd[4] * v_B[1]**3,
-                      p.cd[2] * v_B[2] + p.cd[5] * v_B[2]**3 - p.cd[6] * (v_B[0]**2 + v_B[1]**2))
+    Fd_B = ca.vertcat(params.cd[0] * v_B[0] + params.cd[3] * v_B[0]**3,
+                      params.cd[1] * v_B[1] + params.cd[4] * v_B[1]**3,
+                      params.cd[2] * v_B[2] + params.cd[5] * v_B[2]**3 - params.cd[6] * (v_B[0]**2 + v_B[1]**2))
     Fd_W = rotate_quat(q, Fd_B)
     
     # Moments
-    t_BM = ca.horzcat(-p.l_x, p.l_y)
+    t_BM = ca.horzcat(-params.l_x, params.l_y)
     T = ca.vertcat(u[0], u[1], u[2], u[3])
     tau_yx = ca.mtimes(t_BM.T, T)
 
     f_nominal = ca.vertcat(
         v,                               # p_dot
         0.5*quat_mult(q, ca.vertcat(0, w)),  # q_dot
-        rotate_quat(q, ca.vertcat(0, 0, (u[0]+u[1]+u[2]+u[3])/p.mass)) + p.g - Fd_W/p.mass,  # v_dot
+        rotate_quat(q, ca.vertcat(0, 0, (u[0]+u[1]+u[2]+u[3])/params.mass)) + params.g - Fd_W/params.mass,  # v_dot
         ca.mtimes(inertia_inv, ca.vertcat(                                 # w_dot
             tau_yx[1],
             tau_yx[0],
-            p.kappa*(-u[0]-u[1]+u[2]+u[3]))
+            params.kappa*(-u[0]-u[1]+u[2]+u[3]))
                   -ca.cross(w, ca.mtimes(inertia,w)))
     )
 
     return f_nominal
 
-def dynamics_ssgp(x, u, p, reg, ret_reg=False):
+def dynamics_ssgp(x, u, params, reg, ret_reg=False):
 
-    f_nominal = dynamics(x, u, p)
+    f_nominal = dynamics(x, u, params)
     
     STATE_DIM = 13
 
-    # reg_out = ca.SX(reg)
+    # reg_out = ca.MX(reg)
     
-    reg_out = ca.SX.zeros(reg.shape[0])
+    reg_out = ca.MX.zeros(reg.shape[0])
 
-    for idx, y in enumerate(p.reg_y):
+    for idx, y in enumerate(params.reg_y):
 
-        W = load_ssgp_frequencies(p.reg_y, p.ssgp_path)[idx]
-        alpha = load_ssgp_coeffs(p.reg_y, p.ssgp_path)[idx]
+        W = load_ssgp_frequencies(params.reg_y, params.ssgp_path)[idx]
+        alpha = load_ssgp_coeffs(params.reg_y, params.ssgp_path)[idx]
         phi = phi_function(x, u, W, y)
 
         reg_out[y] = ca.mtimes(phi.T, alpha) * 1e-2
 
-    if all(elem in p.reg_y for elem in [13, 14, 15]): # force
+    if all(elem in params.reg_y for elem in [13, 14, 15]): # force
         q = x[3:7]
-        reg_out[7:10] += v_dot_q(reg_out[13:16], q)/p.mass # v
+        reg_out[7:10] += v_dot_q(reg_out[13:16], q)/params.mass # v
     
-    if all(elem in p.reg_y for elem in [16, 17, 18]): # torque
-        inertia_inv = ca.SX.eye(3)
-        inertia_inv[0,0] = 1/p.inertia_diag[0]
-        inertia_inv[1,1] = 1/p.inertia_diag[1]
-        inertia_inv[2,2] = 1/p.inertia_diag[2]
+    if all(elem in params.reg_y for elem in [16, 17, 18]): # torque
+        inertia_inv = ca.MX.eye(3)
+        inertia_inv[0,0] = 1/params.inertia_diag[0]
+        inertia_inv[1,1] = 1/params.inertia_diag[1]
+        inertia_inv[2,2] = 1/params.inertia_diag[2]
         reg_out[10:13] += ca.mtimes(inertia_inv, reg_out[16:19]) # w
 
     f_expl = f_nominal + reg_out[:STATE_DIM]

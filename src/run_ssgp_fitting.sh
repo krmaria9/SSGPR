@@ -9,12 +9,9 @@ grandparent_dir="$(dirname "$script_dir")"
 # Add grandparent directory to PYTHONPATH
 export PYTHONPATH="${PYTHONPATH}:${grandparent_dir}"
 
-# Env variable for SSGPR
-export SSGPR_PATH=${grandparent_dir}
+n_basis_functions="10"
 
-n_basis_functions="40"
-
-input_feats="4 5 6 7" # th, mot
+input_feats="0 1 2 3" # th
 state_feats="7 8 9 10 11 12" # v, w
 output_feats="13 14 15 16 17 18" # force, torque
 

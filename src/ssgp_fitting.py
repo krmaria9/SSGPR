@@ -6,48 +6,57 @@ import os.path
 from utils import visualize_error, visualization_experiment
 from dataset import Dataset
 import os
+import glob
 
-# TODO (krmaria): discard episodes which failed
-def stack_csv_files(directory_path):
+def stack_csv_files(directory_path, yaml_directory):
     dfs = []  # List to store DataFrames
 
     if not os.path.exists(directory_path):
         print(f"Directory '{directory_path}' not found!")
         return None
 
-    for filename in os.listdir(directory_path):
-        if "states_inputs.csv" in filename:
-            file_path = os.path.join(directory_path, filename)
-            dfs.append(pd.read_csv(file_path))
+    for csv_filename in glob.glob(os.path.join(directory_path, '*states_inputs.csv')):
+        eval_id = csv_filename.split('_')[-3]  # Extract eval_id from filename
+        yaml_pattern = f"{yaml_directory}/iter_*_eval_{eval_id}_*err_0*.yaml"  # Corresponding yaml filename pattern
 
-    result_df = pd.concat(dfs, ignore_index=True)
-    original_length = len(result_df) 
-    result_df = result_df.drop_duplicates(subset=['state_in', 'input_in'], keep='first')
-    final_length = len(result_df)
-    print(f"{(1-final_length/original_length):.2f} % of rows were dropped out of {original_length}")
-    return result_df
+        # Check if corresponding yaml file exists with 'err_0' in its name
+        matching_yaml_files = glob.glob(yaml_pattern)
+        if matching_yaml_files:
+            # print(f"Appending CSV for YAML file: {matching_yaml_files}")
+            dfs.append(pd.read_csv(csv_filename))
+
+    if dfs:
+        result_df = pd.concat(dfs, ignore_index=True)
+        original_length = len(result_df)
+        result_df = result_df.drop_duplicates(subset=['state_in', 'input_in'], keep='first')
+        final_length = len(result_df)
+        print(f"{(1-final_length/original_length):.2f} % of rows were dropped out of {original_length}")
+        return result_df
+    else:
+        return pd.DataFrame()  # Return an empty DataFrame if no matching files are found
 
 def main(x_features, u_features, reg_y_dim, x_cap, hist_bins, hist_thresh, nbf, train, n_restarts, maxiter):
-    save_dir = os.environ['FLIGHTMARE_PATH'] + "/externals/SSGPR/data/RUN_2"
+    save_dir = os.environ['FLIGHTMARE_PATH'] + "/externals/SSGPR/data/RUN_5"
     os.makedirs(save_dir,exist_ok=True)
     base_path = os.environ['FLIGHTMARE_PATH'] + "/flightmpcc/saved_training/"
 
     if (train == 1):
         # List of dataset names
-        dataset_names = ["20230917_234713-TRAIN-BEM", "20230918_071749-TRAIN-BEM"]
+        dataset_names = ["20231122_183045-TRAIN-BEM", "20231122_194206-TRAIN-BEM"]
 
         # Load and concatenate DataFrames
         df_list = []
         for dataset in dataset_names:
-            dataset_path = base_path + dataset + "/nom/"
-            df = stack_csv_files(dataset_path)
+            dataset_path = base_path + dataset + "/nom_mot/"
+            yaml_path = base_path + dataset + "/mpc/"
+            df = stack_csv_files(dataset_path, yaml_path)
             df_list.append(df)
 
         # Concatenate all DataFrames
         df_train = pd.concat(df_list, ignore_index=True)
 
-        max_samples = 3e5
-        ratio = max_samples/df_train.shape[0]
+        max_samples = 5e5
+        ratio = min(max_samples/df_train.shape[0],1)
 
         print(f'Take {ratio:.2f} samples from training set')
         
@@ -66,16 +75,8 @@ def main(x_features, u_features, reg_y_dim, x_cap, hist_bins, hist_thresh, nbf, 
 
             Y_init = gp_dataset.get_y(y_dim=y)
             
-            # Remove outliers
-            threshold = 2  # number of std's
-            mean_y = np.mean(Y_init)
-            std_y = np.std(Y_init)
-
-            mask = (Y_init > mean_y - threshold * std_y) & (Y_init < mean_y + threshold * std_y)
-            mask = mask.flatten()
-            
-            X = X_init[mask]
-            Y = Y_init[mask]
+            X = X_init
+            Y = Y_init
 
             # Split in train and validation sets
             num_points = int(len(X)*0.7)
@@ -103,7 +104,7 @@ def main(x_features, u_features, reg_y_dim, x_cap, hist_bins, hist_thresh, nbf, 
             eval_ids = [12, 47, 78, 120, 165]
             
             for dataset in dataset_names:
-                directory_path = base_path + dataset + "/nom/"
+                directory_path = base_path + dataset + "/nom_mot/"
                 for eval_id in eval_ids:
                     filename = f"eval_id_{eval_id}_states_inputs.csv"
                     test_file = os.path.join(directory_path, filename)
